@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 #
 # Test links:
 # http://data.hu/get/6381232/random.bin
@@ -13,8 +11,6 @@ class DataHu(SimpleDownloader):
     __type__ = "downloader"
     __version__ = "0.08"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://(?:www\.)?data\.hu/get/\w+"
     __config__ = [

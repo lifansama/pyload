@@ -1,6 +1,76 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
     "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <script class="javascript">
+    var submit = true;
+    {% if absolute %}
+      var cwd = "{{oldfile|default(cwd, True)|abspath|replace('\\', '\\\\')}}";
+      var isabsolute = true;
+    {% else %}
+      var cwd = "{{oldfile|default(cwd, True)|relpath|replace('\\', '\\\\')}}";
+      var isabsolute = false;
+    {% endif %}
+
+    {% if type == 'folder' %} {# browsing for folder #}
+      var abspath = "{{url_for('app.pathchooser') + '?path=' + cwd|abspath|quote_plus}}";
+      var relpath = "{{url_for('app.pathchooser') + '?path=' + cwd|relpath|quote_plus}}";
+    {% else %} {# browsing for file #}
+      var abspath = "{{url_for('app.filechooser') + '?path=' + oldfile|default(cwd, True)|abspath|quote_plus}}";
+      var relpath = "{{url_for('app.filechooser') + '?path=' + oldfile|default(cwd, True)|relpath|quote_plus}}";
+    {% endif %}
+    document.addEventListener("readystatechange", function(event) {
+      if (this.readyState === "complete") {
+        document.getElementById("tbody").style.height = (window.innerHeight - 25) + "px";
+        window.onresize = function (event) {
+          document.getElementById("tbody").style.height = (window.innerHeight - 25) + "px";
+        };
+        var clickables = document.getElementsByClassName("tr-clickable");
+        for (var i = 0; i < clickables.length; i++) {
+          clickables[i].onclick = (function () {
+            var onclick = clickables[i].onclick;
+            return function (e) {
+              if (onclick != null && !onclick()) {
+                  return false
+              }
+              if (this.dataset.href !== undefined && this.dataset.href !== "#") {
+                  window.location.href = this.dataset.href;
+                  return false
+              } else {
+                  return true;
+              }
+            }
+          })();
+        }
+      }
+    });
+    function updateParent()
+    {
+        if (window.top.settingsUI !== undefined) {
+            window.top.settingsUI.pathchooserChanged(this);
+        }
+    }
+    function setInvalid() {
+        submit = false;
+        cwd = "";
+        updateParent();
+    }
+    function setValid() {
+        submit = true;
+        updateParent();
+    }
+    function setFile(fullpath, name)
+    {
+        cwd = fullpath;
+        {% if type == "file" %} {# browsing for file #}
+          abspath = "{{url_for('app.filechooser')}}?path={{cwd|abspath|quote_plus}}" + encodeURIComponent(name);
+          relpath = "{{url_for('app.filechooser')}}?path={{cwd|relpath|quote_plus}}" + encodeURIComponent(name);
+        {% endif %}
+        setValid();
+    }
+  </script>
+  <link rel="stylesheet" type="text/css" href="{{theme_static('css/pathchooser.css')}}"/>
+</head>
 <body {% if type == 'file' %}{% if oldfile %}onload="updateParent();"{% else %}onload="setInvalid();"{% endif %}{% else %}onload="updateParent();"{% endif %}>
  <table>
     <thead>
@@ -13,7 +83,7 @@
     </thead>
     <tbody id="tbody">
     {% if parentdir %}
-        <tr class='tr-clickable' data-href="{% if type == 'folder' %}/pathchooser/{{parentdir|quotepath}}{% else %}/filechooser/{{parentdir|quotepath}}{% endif %}">
+        <tr class='tr-clickable' data-href="{% if type == 'folder' %}{{url_for('app.pathchooser')}}{% else %}{{url_for('app.filechooser')}}{% endif %}?path={{parentdir|quote_plus}}">
           <td title="{{_('Parent Directory')}}"><span class="parentdir">..</span></td>
           <td></td>
           <td colspan="2">&lt;DIR&gt;</td>
@@ -22,7 +92,7 @@
     {% for file in files %}
             {% if type == 'folder' %} {# browsing for folder #}
                   {% if file.type == 'dir' %}
-                    <tr class="tr-clickable" data-href="/pathchooser/{{file.fullpath|quotepath}}" title="{{file.name}}">
+                    <tr class="tr-clickable" data-href="{{url_for('app.pathchooser')}}?path={{file.fullpath|quote_plus}}" title="{{file.name}}">
                       <td class="name path_directory text-ellipsis">{{file.name}}</td>
                   {% else %}
                     <tr class="tr-nonclickable" title="{{file.fullpath}}">
@@ -30,7 +100,7 @@
                   {% endif %}
             {% else %} {# browsing for file #}
                   {% if file.type == 'dir' %}
-                   <tr class="tr-clickable" data-href="/filechooser/{{file.fullpath|quotepath}}" title="{{file.fullpath}}">
+                   <tr class="tr-clickable" data-href="{{url_for('app.filechooser')}}?path={{file.fullpath|quote_plus}}" title="{{file.fullpath}}">
                     <td class="name file_directory text-ellipsis">{{file.name}}</td>
                   {% else %}
                    <tr class="tr-clickable" title="{{file.fullpath}}" onclick="setFile('{{file.fullpath|replace("\\", "\\\\")}}', '{{file.name}}');">
@@ -49,11 +119,3 @@
   </table>
   </body>
 </html>
-
-{% block head %}
-<link rel="stylesheet" type="text/css" href="{{theme_static('css/pathchooser.css')}}" />
-{% endblock %}
-
-{% block footer %}
-<script type="text/javascript" src="{{theme_template('js/pathchooser.js')}}"></script>
-{% endblock %}

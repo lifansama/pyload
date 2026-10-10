@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 import urllib.parse
 from datetime import timedelta
@@ -12,8 +10,6 @@ class UnibytesCom(SimpleDownloader):
     __type__ = "downloader"
     __version__ = "0.21"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?unibytes\.com/[\w\- .]{11}B"
     __config__ = [
@@ -54,7 +50,7 @@ class UnibytesCom(SimpleDownloader):
                 ">Somebody else is already downloading using your IP-address<"
                 in self.data
             ):
-                self.wait(timedelta(minutes=10).seconds, True)
+                self.wait(timedelta(minutes=10).total_seconds(), True)
                 self.restart()
 
             if post_data["step"] == "last":

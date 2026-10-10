@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 
 #
 # Test links:
@@ -8,54 +7,27 @@ import base64
 import re
 import urllib.parse
 
-from cryptography.fernet import Fernet
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from pyload.core.network.cookie_jar import CookieJar
-from pyload.core.network.exceptions import Abort
 from pyload.core.network.http.exceptions import BadHeader
 from pyload.core.network.http.http_request import HTTPRequest
+from pyload.core.utils.convert import to_str
 
 from ..anticaptchas.CoinHive import CoinHive
 from ..anticaptchas.ReCaptcha import ReCaptcha
 from ..anticaptchas.SolveMedia import SolveMedia
 from ..base.decrypter import BaseDecrypter
-
-
-class BIGHTTPRequest(HTTPRequest):
-    """
-    Overcome HTTPRequest's load() size limit to allow loading very big web pages by
-    overrding HTTPRequest's write() function.
-    """
-
-    # TODO: Add 'limit' parameter to HTTPRequest in v0.6.x
-    def __init__(self, cookies=None, options=None, limit=1_000_000):
-        self.limit = limit
-        super().__init__(cookies=cookies, options=options)
-
-    def write(self, buf):
-        """
-        writes response.
-        """
-        if self.limit and self.rep.tell() > self.limit or self.abort:
-            rep = self.getResponse()
-            if self.abort:
-                raise Abort
-            with open("response.dump", mode="wb") as fp:
-                fp.write(rep)
-            raise Exception("Loaded Url exceeded limit")
-
-        self.rep.write(buf)
+from ..helpers import replace_patterns
 
 
 class FilecryptCc(BaseDecrypter):
     __name__ = "FilecryptCc"
     __type__ = "decrypter"
-    __version__ = "0.37"
+    __version__ = "0.52"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
-    __pattern__ = r"https?://(?:www\.)?filecrypt\.cc/Container/\w+"
+    __pattern__ = r"https?://(?:www\.)?filecrypt\.(?:cc|co)/Container/\w+"
     __config__ = [
         ("enabled", "bool", "Activated", True),
         ("handle_mirror_pages", "bool", "Handle Mirror Pages", True),
@@ -68,16 +40,15 @@ class FilecryptCc(BaseDecrypter):
         ("GammaC0de", "nitzo2001[AT]yahoo[DOT]com"),
     ]
 
-    # URL_REPLACEMENTS  = [(r'.html$', ""), (r'$', ".html")]  # TODO: Extend
-    # SimpleDecrypter
-
     COOKIES = [("filecrypt.cc", "lang", "en")]
+    URL_REPLACEMENTS = [(r"filecrypt.co", "filecrypt.cc")]
 
     DLC_LINK_PATTERN = r'onclick="DownloadDLC\(\'(.+)\'\);">'
-    WEBLINK_PATTERN = r"openLink.?'([\w\-]*)',"
+    WEBLINK_PATTERN = r"<button onclick=\"[\w\-]+?/\*\d+?\*/\('([\w/-]+?)',"
     MIRROR_PAGE_PATTERN = r'"[\w]*" href="(https?://(?:www\.)?filecrypt.cc/Container/\w+\.html\?mirror=\d+)">'
+    OFFLINE_PATTERN = r">Not Found<"
 
-    CAPTCHA_PATTERN = r"<h2>Security prompt</h2>"
+    CAPTCHA_PATTERN = r"<h2>Security Check</h2>"
     INTERNAL_CAPTCHA_PATTERN = r'<img id="nc" .* src="(.+?)"'
     CIRCLE_CAPTCHA_PATTERN = r'<input type="image" src="(.+?)"'
     KEY_CAPTCHA_PATTERN = r"<script language=JavaScript src='(http://backs\.keycaptcha\.com/swfs/cap\.js)'"
@@ -91,16 +62,18 @@ class FilecryptCc(BaseDecrypter):
         except Exception:
             pass
 
-        self.req.http = BIGHTTPRequest(
-            cookies=CookieJar(None),
+        self.req.http = HTTPRequest(
+            cookies=self.req.cj,
             options=self.pyload.request_factory.get_options(),
             limit=2_000_000,
         )
 
     def decrypt(self, pyfile):
+        pyfile.url = replace_patterns(pyfile.url, self.URL_REPLACEMENTS)
+
         self.data = self._filecrypt_load_url(pyfile.url)
 
-        if "content notfound" in self.data:  # NOTE: "content notfound" is NOT a typo
+        if re.search(self.OFFLINE_PATTERN, self.data):
             self.offline()
 
         self.handle_password_protection()
@@ -141,7 +114,7 @@ class FilecryptCc(BaseDecrypter):
     def handle_password_protection(self):
         if (
             re.search(
-                r'div class="input">\s*<input type="password" name="password" id="p4assw0rt"',
+                r'div class="input">\s*<input type="text" name="password" id="p4assw0rt"',
                 self.data,
             )
             is None
@@ -287,7 +260,7 @@ class FilecryptCc(BaseDecrypter):
 
         if captcha_key:
             self.captcha = recaptcha
-            response, challenge = recaptcha.challenge(captcha_key)
+            response = recaptcha.challenge(captcha_key)
 
             return self._filecrypt_load_url(
                 url, post={"g-recaptcha-response": response}
@@ -297,6 +270,9 @@ class FilecryptCc(BaseDecrypter):
             return None
 
     def handle_dlc_container(self):
+        m = re.search(r"const (\w+) = DownloadDLC;", self.site_with_links)
+        if m is not None:
+            self.site_with_links = self.site_with_links.replace(m.group(1), "DownloadDLC")
         dlcs = re.findall(self.DLC_LINK_PATTERN, self.site_with_links)
 
         if not dlcs:
@@ -312,26 +288,27 @@ class FilecryptCc(BaseDecrypter):
             links = re.findall(self.WEBLINK_PATTERN, self.site_with_links)
 
             for link in links:
-                link = "http://filecrypt.cc/Link/{}.html".format(link)
+                link = "https://filecrypt.cc/Link/{}.html".format(link)
                 for i in range(5):
                     self.data = self._filecrypt_load_url(link)
-                    res = self.handle_captcha(link)
-                    if res not in (None, ""):
+                    m = re.search(r'https://filecrypt\.cc/index\.php\?Action=Go&id=\w+', self.data)
+                    if m is not None:
+                        headers = self._filecrypt_load_url(m.group(0), just_header=True)
+                        self.urls.append(headers["location"])
                         break
 
                 else:
-                    self.fail(self._("Max captcha retries reached"))
-
-                link2 = re.search('<iframe .* noresize src="(.*)"></iframe>', res)
-                if link2:
-                    res2 = self._filecrypt_load_url(link2.group(1), just_header=True)
-                    self.urls.append(res2["location"])
+                    self.log_error(self._("Weblink could not be found"))
 
         except Exception as exc:
             self.log_debug(f"Error decrypting weblinks: {exc}")
 
     def handle_CNL(self):
         try:
+            m = re.search(r"const (\w+) = CNLPOP;", self.site_with_links)
+            if m is not None:
+                self.site_with_links = self.site_with_links.replace(m.group(1), "CNLPOP")
+
             CNLdata = re.findall(
                 r'onsubmit="CNLPOP\(\'(.*)\', \'(.*)\', \'(.*)\', \'(.*)\'\);',
                 self.site_with_links,
@@ -343,12 +320,15 @@ class FilecryptCc(BaseDecrypter):
             self.log_debug(f"Error decrypting CNL: {exc}")
 
     def _get_links(self, crypted, jk):
-        #: Get key
-        key = bytes.fromhex(jk)
+        #: Get key and iv
+        key = iv = bytes.fromhex(jk)
 
         #: Decrypt
-        obj = Fernet(key)
-        text = obj.decrypt(base64.b64decode(crypted))
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+        decryptor = cipher.decryptor()
+        text = to_str(
+            decryptor.update(base64.b64decode(crypted)) + decryptor.finalize()
+        )
 
         #: Extract links
         text = text.replace("\x00", "").replace("\r", "")

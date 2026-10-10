@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import time
 
 from ..base.addon import BaseAddon
@@ -17,7 +15,7 @@ class Interface:
             return 0
 
     def use_for(self, plugin_name, account):
-        self.history[(plugin_name, account)] = time.time()
+        self.history[(plugin_name, account)] = time.monotonic()
 
     def __repr__(self):
         return "<Interface - {}>".format(self.address)
@@ -28,8 +26,6 @@ class MultiHome(BaseAddon):
     __type__ = "addon"
     __version__ = "0.21"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __config__ = [
         ("enabled", "bool", "Activated", False),

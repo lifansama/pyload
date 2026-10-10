@@ -1,84 +1,171 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: vuolter
-
-import traceback
 from ast import literal_eval
 from itertools import chain
+from logging import getLogger
+from typing import Any
 from urllib.parse import unquote
 
 import flask
 from flask.json import jsonify
+from werkzeug.exceptions import RequestEntityTooLarge
 
-from ..helpers import clear_session, login_required, set_session
+from pyload import APPID
 
-bp = flask.Blueprint("api", __name__, url_prefix="/api")
+from ..api_docs.openapi_specification_generator import OpenAPISpecificationGenerator
+from ..helpers import apikey_auth, csrf_exempt, is_authenticated, rate_limit
+
+bp = flask.Blueprint("api", __name__)
+log = getLogger(APPID)
 
 
 # accepting positional arguments, as well as kwargs via post and get
-# @bottle.route(
-# r"/api/<func><args:re:[a-zA-Z0-9\-_/\"\'\[\]%{},]*>")
-@login_required("ALL")
-@bp.route("/<func>", methods=["GET", "POST"], endpoint="rpc")
-@bp.route("/<func>?=<args>", methods=["GET", "POST"], endpoint="rpc")
+@bp.route("/api/<func>", methods=["GET", "POST"], endpoint="rpc")
+@bp.route("/api/<func>/<args>", methods=["GET", "POST"], endpoint="rpc")
 # @apiver_check
+@apikey_auth
+@rate_limit(count=100, period=60)  #: 100/minute
 def rpc(func, args=""):
+    if func.startswith("_"):
+        flask.flash(f"Invalid API call '{func}'")
+        return jsonify({'error': "Forbidden"}), 403
 
     api = flask.current_app.config["PYLOAD_API"]
-    s = flask.session
-    if not api.is_authorized(func, {"role": s["role"], "permission": s["perms"]}):
-        return "Unauthorized", 401
 
+    # Enforce HTTP method for the API method
+    expected = api._required_http_method_for_api(func)
+    if expected is None:
+        return jsonify({'error': "Not Found"}), 404
+
+    actual = flask.request.method
+    if actual != expected:
+        err_message = f"Method not allowed in API {func}(): Expected {expected}, got {actual}"
+        log.error(err_message)
+        return jsonify({'error': err_message}), 405
+
+    # Get user info from API key or http session
+    if not hasattr(flask.g, 'user_info'):
+        return jsonify({'error': "Login required"}), 401
+
+    # Check permissions
+    user_info = flask.g.user_info
+    if not api.is_authorized(func, {"role": user_info["role"], "permission": user_info["permission"]}):
+        log.error(f"API access denied for function '{func}'")
+        return jsonify({'error': "Access denied"}), 401
+
+    # get path parameters
     args = args.split(",")
-    kwargs = {}
-
-    for x, y in chain(flask.request.args.items(), flask.request.form.items()):
-        kwargs[x] = unquote(y)
+    if len(args) == 1 and not args[0]:
+        args = []
 
     try:
-        response = call_api(func, *args, **kwargs)
+        # get query parameters
+        kwargs = {}
+        for x, y in chain(flask.request.args.items(), flask.request.form.items()):
+            kwargs[x] = unquote(y)
+
+        if flask.request.mimetype == "application/json":
+            # get JSON request body
+            json_request_body = flask.request.get_json()
+            response = jsonify(getattr(api, func)(**json_request_body))
+        elif flask.request.mimetype == "multipart/form-data":
+            # get uploaded file - currently only single file upload possible
+            name, file = next(iter(flask.request.files.items()))
+            max_upload_size = flask.current_app.config.get("MAX_CONTENT_LENGTH")
+            if max_upload_size is None:
+                max_upload_size = 16 * 1024 * 1024  #: 16 Megabytes
+            file_data = file.read(max_upload_size + 1)
+            if len(file_data) > max_upload_size:
+                raise RequestEntityTooLarge()
+
+            response = jsonify(getattr(api, func)(
+                **{x: _parse_parameter(y) for x, y in kwargs.items()},
+                **{name: file_data}
+            ))
+        else:
+            response = jsonify(getattr(api, func)(
+                *[_parse_parameter(x) for x in args],
+                **{x: _parse_parameter(y) for x, y in kwargs.items()},
+            ))
+    except RequestEntityTooLarge:
+        return jsonify({"error": "Request body too large"}), 413
     except Exception as exc:
-        response = jsonify(error=exc, traceback=traceback.format_exc()), 500
+        flask.current_app.logger.error(f"API error in '{func}'",
+            exc_info=api.pyload.debug > 1,
+            stack_info=api.pyload.debug > 2
+        )
+
+        response = jsonify({"error": "Internal server error"}), 500
 
     return response
 
 
-def call_api(func, *args, **kwargs):
+def _parse_parameter(param: str) -> Any:
+    if param == "true":
+        return True
+    elif param == "false":
+        return False
+    else:
+        try:
+            return literal_eval(param)
+        except (ValueError, SyntaxError):
+            # this is required to allow string parameters without extra quotes
+            return literal_eval("\"" + param + "\"")
+
+
+@bp.route("/api/openapi.json", methods=["GET"])
+def api_docs():
+    """Return OpenAPI specification JSON"""
     api = flask.current_app.config["PYLOAD_API"]
 
-    if func.startswith("_"):
-        flask.flash(f"Invalid API call '{func}'")
+    s = flask.session
+    basic_auth = flask.request.authorization
+
+    if basic_auth:
+        user_info = api.check_auth(basic_auth.username, basic_auth.password)
+        if not user_info:
+            return "Forbidden", 403
+    elif not is_authenticated(s):
+        return "Authentication required", 401, {'WWW-Authenticate': 'Basic realm="Login Required"'}
+    else:
+        user_info = {"role": s["role"], "permission": s["perms"], "id": s["id"]}
+
+    if user_info["role"] != 0:  #: Role.ADMIN
         return "Forbidden", 403
 
-    result = getattr(api, func)(
-        *[literal_eval(x) for x in args],
-        **{x: literal_eval(y) for x, y in kwargs.items()},
-    )
-
-    # null is invalid json response
-    return jsonify(result or True)
+    openapi_spec = OpenAPISpecificationGenerator(api=api).generate_openapi_json()
+    return openapi_spec
 
 
-@bp.route("/login", methods=["POST"], endpoint="login")
+@bp.route("/api", methods=["GET"], strict_slashes=False)
+def swagger_ui():
+    """Serve Swagger UI with the API documentation"""
+    api = flask.current_app.config["PYLOAD_API"]
+
+    s = flask.session
+    basic_auth = flask.request.authorization
+
+    if basic_auth:
+        user_info = api.check_auth(basic_auth.username, basic_auth.password)
+        if not user_info:
+            return "Forbidden", 403
+    elif not is_authenticated(s):
+        return "Authentication required", 401, {'WWW-Authenticate': 'Basic realm="Login Required"'}
+    else:
+        user_info = {"role": s["role"], "permission": s["perms"], "id": s["id"]}
+
+    if user_info["role"] != 0:  #: Role.ADMIN
+        return "Forbidden", 403
+
+    return flask.send_from_directory("static", "swagger.html")
+
+
+@bp.route("/api/login", methods=["POST"], endpoint="login")
+@csrf_exempt
 # @apiver_check
 def login():
-    user = flask.request.form["username"]
-    password = flask.request.form["password"]
-
-    api = flask.current_app.config["PYLOAD_API"]
-    user_info = api.check_auth(user, password)
-
-    if not user_info:
-        return jsonify(False)
-
-    s = set_session(user_info)
-    flask.flash("Logged in successfully")
-
-    return jsonify(s)
+    return "Obsolete API", 404
 
 
-@bp.route("/logout", endpoint="logout")
+@bp.route("/api/logout", endpoint="logout")
 # @apiver_check
 def logout():
-    # logout_user()
-    clear_session()
-    return jsonify(True)
+    return "Obsolete API", 404

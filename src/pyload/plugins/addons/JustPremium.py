@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import re
 
 from ..base.addon import BaseAddon
@@ -9,8 +8,6 @@ class JustPremium(BaseAddon):
     __type__ = "addon"
     __version__ = "0.27"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __config__ = [
         ("enabled", "bool", "Activated", False),
@@ -30,7 +27,7 @@ class JustPremium(BaseAddon):
         self.event_map = {"links_added": "links_added"}
 
     def links_added(self, links, pid):
-        hosterdict = self.pyload.plugin_manager.hoster_plugins
+        hosterdict = self.pyload.plugin_manager.downloader_plugins
         linkdict = self.pyload.api.check_urls(links)
 
         premiumplugins = set(
@@ -40,7 +37,7 @@ class JustPremium(BaseAddon):
         )
         multihosters = set(
             hoster
-            for hoster in self.pyload.plugin_manager.hoster_plugins
+            for hoster in self.pyload.plugin_manager.downloader_plugins
             if "new_name" in hosterdict[hoster]
             and hosterdict[hoster]["new_name"] in premiumplugins
         )

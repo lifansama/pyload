@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 import time
 from datetime import timedelta
@@ -13,11 +11,9 @@ class MegaRapidoNet(MultiAccount):
     __version__ = "0.10"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
     __config__ = [
-        ("mh_mode", "all;listed;unlisted", "Filter hosters to use", "all"),
-        ("mh_list", "str", "Hoster list (comma separated)", ""),
+        ("mh_mode", "all;listed;unlisted", "Filter downloaders to use", "all"),
+        ("mh_list", "str", "Downloader list (comma separated)", ""),
         ("mh_interval", "int", "Reload interval in hours", 12),
     ]
 
@@ -102,9 +98,9 @@ class MegaRapidoNet(MultiAccount):
             #: Hier weitermachen!!! (müssen umbedingt die zeit richtig machen damit! (sollte aber möglich))
             validuntil = (
                 time.time()
-                + timedelta(hours=int(validuntil.group(1)) * 24).seconds
-                + timedelta(hours=int(validuntil.group(2))).seconds
-                + timedelta(minutes=int(validuntil.group(3))).seconds
+                + timedelta(hours=int(validuntil.group(1)) * 24).total_seconds()
+                + timedelta(hours=int(validuntil.group(2))).total_seconds()
+                + timedelta(minutes=int(validuntil.group(3))).total_seconds()
                 + int(validuntil.group(4))
             )
             trafficleft = -1

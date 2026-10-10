@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 
 from ..base.decrypter import BaseDecrypter
@@ -10,8 +8,6 @@ class MultiloadCz(BaseDecrypter):
     __type__ = "decrypter"
     __version__ = "0.46"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://(?:[^/]*\.)?multiload\.cz/(stahnout|slozka)/.+"
     __config__ = [

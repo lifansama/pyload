@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from ..base.simple_downloader import SimpleDownloader
 
 
@@ -8,8 +6,6 @@ class SenditCloud(SimpleDownloader):
     __type__ = "downloader"
     __version__ = "0.01"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?sendit\.cloud/\w+"
     __config__ = [

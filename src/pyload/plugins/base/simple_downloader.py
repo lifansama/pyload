@@ -1,22 +1,18 @@
-# -*- coding: utf-8 -*-
 import os
 import re
 
 from pyload.core.network.http.exceptions import BadHeader
-from pyload.core.network.request_factory import get_url
 from pyload.core.utils import parse
 
-from ..helpers import replace_patterns
+from ..helpers import replace_patterns, search_pattern
 from .downloader import BaseDownloader
 
 
 class SimpleDownloader(BaseDownloader):
     __name__ = "SimpleDownloader"
     __type__ = "downloader"
-    __version__ = "2.27"
+    __version__ = "2.42"
     __status__ = "stable"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"^unmatchable$"
     __config__ = [
@@ -95,8 +91,8 @@ class SimpleDownloader(BaseDownloader):
     #: Set to False to not check the last downloaded file with declared error patterns
     CHECK_FILE = True
     CHECK_TRAFFIC = (
-        False
-    )  #: Set to True to reload checking traffic left for premium account
+        False  #: Set to True to reload checking traffic left for premium account
+    )
     COOKIES = True  #: or False or list of tuples [(domain, name, value)]
     #: Set to True to looking for direct link (as defined in handle_direct method), set to None to do it if self.account is True else False
     DIRECT_LINK = True
@@ -104,8 +100,6 @@ class SimpleDownloader(BaseDownloader):
     DISPOSITION = True
     LOGIN_ACCOUNT = False  #: Set to True to require account login
     LOGIN_PREMIUM = False  #: Set to True to require premium account login
-    #: Set to True to leech other hoster link (as defined in handle_multi method)
-    LEECH_HOSTER = False
     #: Set to encoding name if encoding value in http header is not correct
     TEXT_ENCODING = True
     # TRANSLATE_ERROR      = True
@@ -118,9 +112,11 @@ class SimpleDownloader(BaseDownloader):
     NAME_PATTERN = None
     SIZE_PATTERN = None
     HASHSUM_PATTERN = r"[^\w](?P<H>(CRC|crc)(-?32)?|(MD|md)-?5|(SHA|sha)-?(1|224|256|384|512)).*(:|=|>)[ ]*(?P<D>(?:[a-z0-9]|[A-Z0-9]){8,})"
-    OFFLINE_PATTERN = r"[^\w](404\s|[Ii]nvalid|[Oo]ffline|[Dd]elet|[Rr]emov|([Nn]o(t|thing)?|sn\'t) (found|(longer )?(available|exist)))"
+    OFFLINE_PATTERN = (
+        r"[^\w](?:404\s|[Nn]ot [Ff]ound|[Ff]ile (?:was|has been)?\s*(?:removed|deleted)|[Ff]ile (?:does not exist|could not be found|no longer available))"
+    )
     TEMP_OFFLINE_PATTERN = (
-        r"[^\w](503\s|[Mm]aint(e|ai)nance|[Tt]emp([.-]|orarily)|[Mm]irror)"
+        r"[^\w](?:503\s|[Ss]erver (?:is (?:in|under) )?[Mm]aint(?:e|ai)nance|[Tt]emp(?:[.-]|orarily )(?:[Oo]ffline|[Uu]available)|[Uu]se (?:[Aa] )?[Mm]irror)"
     )
 
     WAIT_PATTERN = None
@@ -134,20 +130,18 @@ class SimpleDownloader(BaseDownloader):
     FILE_ERRORS = [
         (
             "Html error",
-            r"\A(?:\s*<.+>)?((?:[\w\s]*(?:[Ee]rror|ERROR)\s*\:?)?\s*\d{3})(?:\Z|\s+)",
+            rb"\A(?:\s*<.+>)?((?:[\w\s]*(?:[Ee]rror|ERROR)\s*\:?)?\s*\d{3})(?:\Z|\s+)",
         ),
-        ("Request error", r"([Aa]n error occured while processing your request)"),
-        ("Html file", r"\A\s*<!DOCTYPE html"),
+        ("Request error", rb"([Aa]n error occurred while processing your request)"),
+        ("Html file", rb"\A\s*<!DOCTYPE html"),
     ]
 
-    @classmethod
-    def api_info(cls, url):
+    def api_info(self, url):
         return {}
 
-    @classmethod
-    def get_info(cls, url="", html=""):
-        info = super(SimpleDownloader, cls).get_info(url)
-        info.update(cls.api_info(url))
+    def get_info(self, url="", html=""):
+        info = super(SimpleDownloader, self).get_info(url)
+        info.update(self.api_info(url))
 
         if not html and info["status"] != 2:
             if not url:
@@ -156,7 +150,7 @@ class SimpleDownloader(BaseDownloader):
 
             elif info["status"] in (3, 7):
                 try:
-                    html = get_url(url, cookies=cls.COOKIES, decode=cls.TEXT_ENCODING)
+                    html = self.load(url, cookies=self.COOKIES, decode=self.TEXT_ENCODING)
 
                 except BadHeader as exc:
                     info["error"] = "{}: {}".format(exc.code, exc.content)
@@ -164,14 +158,11 @@ class SimpleDownloader(BaseDownloader):
                 except Exception:
                     pass
 
-        if html:
-            if cls.OFFLINE_PATTERN and re.search(cls.OFFLINE_PATTERN, html) is not None:
+        if html and info["status"] in (3, 7):
+            if search_pattern(self.OFFLINE_PATTERN, html) is not None:
                 info["status"] = 1
 
-            elif (
-                cls.TEMP_OFFLINE_PATTERN
-                and re.search(cls.TEMP_OFFLINE_PATTERN, html) is not None
-            ):
+            elif search_pattern(self.TEMP_OFFLINE_PATTERN, html) is not None:
                 info["status"] = 6
 
             else:
@@ -182,8 +173,8 @@ class SimpleDownloader(BaseDownloader):
                     "HASHSUM_PATTERN",
                 ):
                     try:
-                        attr = getattr(cls, pattern)
-                        pdict = re.search(attr, html).groupdict()
+                        attr = getattr(self, pattern)
+                        pdict = search_pattern(attr, html).groupdict()
 
                         if all(True for k in pdict if k not in info["pattern"]):
                             info["pattern"].update(pdict)
@@ -195,20 +186,20 @@ class SimpleDownloader(BaseDownloader):
                         info["status"] = 2
 
         if "N" in info["pattern"]:
-            name = replace_patterns(info["pattern"]["N"], cls.NAME_REPLACEMENTS)
-            info["name"] = parse_name(name)
+            name = replace_patterns(info["pattern"]["N"], self.NAME_REPLACEMENTS)
+            info["name"] = parse.name(name)
 
         if "S" in info["pattern"]:
             size = replace_patterns(
                 info["pattern"]["S"] + info["pattern"]["U"]
                 if "U" in info["pattern"]
                 else info["pattern"]["S"],
-                cls.SIZE_REPLACEMENTS,
+                self.SIZE_REPLACEMENTS,
             )
             info["size"] = parse.bytesize(size)
 
         elif isinstance(info["size"], str):
-            unit = info["units"] if "units" in info else ""
+            unit = info["units"] if "units" in info else None
             info["size"] = parse.bytesize(info["size"], unit)
 
         if "H" in info["pattern"]:
@@ -224,7 +215,6 @@ class SimpleDownloader(BaseDownloader):
     def _prepare(self):
         self.link = ""
         self.direct_dl = False
-        self.leech_dl = False
 
         if self.LOGIN_PREMIUM:
             self.no_fallback = True
@@ -243,74 +233,52 @@ class SimpleDownloader(BaseDownloader):
             if self.LINK_PREMIUM_PATTERN is None:
                 self.LINK_PREMIUM_PATTERN = self.LINK_PATTERN
 
-        if self.LEECH_HOSTER:
-            pattern = self.pyload.plugin_manager.hoster_plugins.get(self.classname)[
-                "pattern"
-            ]
-            if (
-                self.__pattern__ != pattern
-                and re.match(self.__pattern__, self.pyfile.url) is None
-            ):
-                self.leech_dl = True
-
-        if self.leech_dl:
-            self.direct_dl = False
-
-        elif self.DIRECT_LINK is None:
+        if self.DIRECT_LINK is None:
             self.direct_dl = bool(self.premium)
 
         else:
             self.direct_dl = self.DIRECT_LINK
 
-        if not self.leech_dl:
-            self.pyfile.url = replace_patterns(self.pyfile.url, self.URL_REPLACEMENTS)
+        self.pyfile.url = replace_patterns(self.pyfile.url, self.URL_REPLACEMENTS)
 
     def _preload(self):
         if self.data:
             return
 
         self.data = self.load(
-            self.pyfile.url, cookies=self.COOKIES, ref=False, decode=self.TEXT_ENCODING
+            self.pyfile.url, cookies=self.COOKIES, referrer=False, decode=self.TEXT_ENCODING
         )
 
     def process(self, pyfile):
         self._prepare()
 
-        # TODO: Remove `handle_multi`, use MultiDownloader instead
-        if self.leech_dl:
-            self.log_info(self._("Processing as debrid download..."))
-            self.handle_multi(pyfile)
+        if not self.link and self.direct_dl:
+            self.log_info(self._("Looking for direct download link..."))
+            self.handle_direct(pyfile)
 
-        else:
-            if not self.link and self.direct_dl:
-                self.log_info(self._("Looking for direct download link..."))
-                self.handle_direct(pyfile)
+            if self.link:
+                self.log_info(self._("Direct download link detected"))
+            else:
+                self.log_info(self._("Direct download link not found"))
 
-                if self.link:
-                    self.log_info(self._("Direct download link detected"))
-                else:
-                    self.log_info(self._("Direct download link not found"))
+        if not self.link:
+            self._preload()
+            self.check_errors()
 
-            if not self.link:
-                self._preload()
-                self.check_errors()
+            if self.info.get("status", 7) != 2:
+                super(SimpleDownloader, self).grab_info()
+                self.check_status()
+                self.pyfile.set_status("starting")
+                self.check_duplicates()
 
-                if self.info.get("status", 7) != 2:
-                    self.grab_info()
-                    self.check_status()
-                    self.check_duplicates()
+            out_of_traffic = self.CHECK_TRAFFIC and self.out_of_traffic()
+            if self.premium and not out_of_traffic:
+                self.log_info(self._("Processing as premium download..."))
+                self.handle_premium(pyfile)
 
-                if self.premium and (
-                    not self.CHECK_TRAFFIC or not self.out_of_traffic()
-                ):
-                    self.log_info(self._("Processing as premium download..."))
-                    self.handle_premium(pyfile)
-
-                elif not self.LOGIN_ACCOUNT or (
-                    not self.CHECK_TRAFFIC or not self.out_of_traffic()
-                ):
-                    self.log_info(self._("Processing as free download..."))
-                    self.handle_free(pyfile)
+            elif not self.LOGIN_ACCOUNT or not out_of_traffic:
+                self.log_info(self._("Processing as free download..."))
+                self.handle_free(pyfile)
 
         if self.link and not self.last_download:
             self.log_info(self._("Downloading file..."))
@@ -343,60 +311,68 @@ class SimpleDownloader(BaseDownloader):
             if self.CHECK_FILE:
                 self.log_info(self._("Checking file (with custom rules)..."))
 
-                with open(os.fsdecode(self.last_download), mode="rb") as fp:
-                    self.data = fp.read(1_048_576)  # TODO: Recheck in 0.6.x
+                try:
+                    with open(os.fsdecode(self.last_download), mode="r", encoding='utf-8') as fp:
+                        self.data = fp.read(1_048_576)  # TODO: Recheck in 0.6.x
+
+                except UnicodeDecodeError:
+                    with open(os.fsdecode(self.last_download), mode="r", encoding='iso-8859-1') as fp:
+                        self.data = fp.read(1_048_576)  # TODO: Recheck in 0.6.x
 
                 self.check_errors()
 
-        self.log_info(self._("No errors found"))
+            else:
+                self.log_info(self._("No errors found"))
 
-    def check_errors(self):
+    def check_errors(self, data=None):
         self.log_info(self._("Checking for link errors..."))
 
-        if not self.data:
+        data = data or self.data
+
+        if not data:
             self.log_warning(self._("No data to check"))
             return
+        elif isinstance(data, bytes):
+            self.log_debug(self._("No check on binary data"))
+            return
 
-        if self.IP_BLOCKED_PATTERN and re.search(self.IP_BLOCKED_PATTERN, self.data):
+        if search_pattern(self.IP_BLOCKED_PATTERN, data):
             self.fail(self._("Connection from your current IP address is not allowed"))
 
         elif not self.premium:
-            if self.PREMIUM_ONLY_PATTERN and re.search(
-                self.PREMIUM_ONLY_PATTERN, self.data
-            ):
+            if search_pattern(self.PREMIUM_ONLY_PATTERN, data):
                 self.fail(self._("File can be downloaded by premium users only"))
 
-            elif self.SIZE_LIMIT_PATTERN and re.search(
-                self.SIZE_LIMIT_PATTERN, self.data
-            ):
+            elif search_pattern(self.SIZE_LIMIT_PATTERN, data):
                 self.fail(self._("File too large for free download"))
 
-            elif self.DL_LIMIT_PATTERN and re.search(self.DL_LIMIT_PATTERN, self.data):
-                m = re.search(self.DL_LIMIT_PATTERN, self.data)
-                try:
-                    errmsg = m.group(1)
+            elif self.DL_LIMIT_PATTERN:
+                m = search_pattern(self.DL_LIMIT_PATTERN, data)
+                if m is not None:
+                    try:
+                        errmsg = m.group(1)
 
-                except (AttributeError, IndexError):
-                    errmsg = m.group(0)
+                    except (AttributeError, IndexError):
+                        errmsg = m.group(0)
 
-                finally:
-                    errmsg = re.sub(r"<.*?>", " ", errmsg.strip())
+                    finally:
+                        errmsg = re.sub(r"<.*?>", " ", errmsg.strip())
 
-                self.info["error"] = errmsg
-                self.log_warning(errmsg)
+                    self.info["error"] = errmsg
+                    self.log_warning(errmsg)
 
-                wait_time = parse.seconds(errmsg)
-                self.wait(
-                    wait_time,
-                    reconnect=wait_time > self.config.get("max_wait", 10) * 60,
-                )
-                self.restart(self._("Download limit exceeded"))
+                    wait_time = parse.seconds(errmsg)
+                    self.wait(
+                        wait_time,
+                        reconnect=wait_time > self.config.get("max_wait", 10) * 60,
+                    )
+                    self.restart(self._("Download limit exceeded"))
 
-        if self.HAPPY_HOUR_PATTERN and re.search(self.HAPPY_HOUR_PATTERN, self.data):
+        if search_pattern(self.HAPPY_HOUR_PATTERN, data):
             self.multi_dl = True
 
         if self.ERROR_PATTERN:
-            m = re.search(self.ERROR_PATTERN, self.data)
+            m = search_pattern(self.ERROR_PATTERN, data)
             if m is not None:
                 try:
                     errmsg = m.group(1).strip()
@@ -410,10 +386,10 @@ class SimpleDownloader(BaseDownloader):
                 self.info["error"] = errmsg
                 self.log_warning(errmsg)
 
-                if re.search(self.TEMP_OFFLINE_PATTERN, errmsg):
+                if search_pattern(self.TEMP_OFFLINE_PATTERN, errmsg):
                     self.temp_offline()
 
-                elif re.search(self.OFFLINE_PATTERN, errmsg):
+                elif search_pattern(self.OFFLINE_PATTERN, errmsg):
                     self.offline()
 
                 elif re.search(r"limit|wait|slot", errmsg, re.I):
@@ -459,7 +435,7 @@ class SimpleDownloader(BaseDownloader):
                     self.restart(errmsg)
 
         elif self.WAIT_PATTERN:
-            m = re.search(self.WAIT_PATTERN, self.data)
+            m = search_pattern(self.WAIT_PATTERN, data)
             if m is not None:
                 try:
                     waitmsg = m.group(1).strip()
@@ -482,17 +458,24 @@ class SimpleDownloader(BaseDownloader):
         self.grab_info()
         return self.info
 
-    def handle_direct(self, pyfile):
-        self.link = pyfile.url if self.isresource(pyfile.url) else None
+    def grab_info(self):
+        if self.info.get("status", 7) != 2:
+            self.pyfile.name = parse.name(self.pyfile.url)
 
-    def handle_multi(self, pyfile):  #: Multi-hoster handler
-        pass
+    def handle_direct(self, pyfile):
+        link = self.isresource(pyfile.url)
+        if link:
+            pyfile.name = parse.name(link)
+            self.link = pyfile.url
+
+        else:
+            self.link = None
 
     def handle_free(self, pyfile):
         if not self.LINK_FREE_PATTERN:
             self.fail(self._("Free download not implemented"))
 
-        m = re.search(self.LINK_FREE_PATTERN, self.data)
+        m = search_pattern(self.LINK_FREE_PATTERN, self.data)
         if m is None:
             self.error(self._("Free download link not found"))
         else:
@@ -503,7 +486,7 @@ class SimpleDownloader(BaseDownloader):
             self.log_warning(self._("Premium download not implemented"))
             self.restart(premium=False)
 
-        m = re.search(self.LINK_PREMIUM_PATTERN, self.data)
+        m = search_pattern(self.LINK_PREMIUM_PATTERN, self.data)
         if m is None:
             self.error(self._("Premium download link not found"))
         else:

@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-
-
 from ..base.addon import BaseAddon
 
 
@@ -9,8 +6,6 @@ class LinkFilter(BaseAddon):
     __type__ = "addon"
     __version__ = "0.16"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __config__ = [
         ("enabled", "bool", "Activated", False),
@@ -24,7 +19,7 @@ class LinkFilter(BaseAddon):
         ),
     ]
 
-    __description__ = "Filters all added hoster links"
+    __description__ = "Filters all added downloader links"
     __license__ = "GPLv3"
     __authors__ = [("segelkma", None)]
 
@@ -45,50 +40,50 @@ class LinkFilter(BaseAddon):
             self.blacklist(links, filters)
 
     def whitelist(self, links, filters):
-        plugindict = dict(self.pyload.plugin_manager.parse_urls(links))
-        linkcount = len(links)
+        plugin_dict = dict(self.pyload.plugin_manager.parse_urls(links))
+        link_count = len(links)
         links[:] = [
             link
             for link in links
             if any(link.find(fltr) != -1 for fltr in filters)
-            or not self.is_hoster_link(link)
-            and plugindict[link] != "DefaultPlugin"
+            or not self.is_downloader_link(link)
+            and plugin_dict[link] != "DefaultPlugin"
         ]
-        linkcount -= len(links)
+        link_count -= len(links)
 
-        if linkcount > 0:
-            linkstring = "" if self.config.get("filter_all") else "hoster "
-            linkstring += "link" if linkcount == 1 else "links"
+        if link_count > 0:
+            link_type = "" if self.config.get("filter_all") else "downloader "
+            link_type += "link" if link_count == 1 else "links"
             self.log_warning(
                 self._("Whitelist filter removed {} {} not containing ({})").format(
-                    linkcount, linkstring, ", ".join(filters)
+                    link_count, link_type, ", ".join(filters)
                 )
             )
 
     def blacklist(self, links, filters):
         for fltr in filters:
-            linkcount = len(links)
+            link_count = len(links)
             links[:] = [
                 link
                 for link in links
-                if link.find(fltr) == -1 or not self.is_hoster_link(link)
+                if link.find(fltr) == -1 or not self.is_downloader_link(link)
             ]
-            linkcount -= len(links)
+            link_count -= len(links)
 
-            if linkcount > 0:
-                linkstring = "" if self.config.get("filter_all") else "hoster "
-                linkstring += "link" if linkcount == 1 else "links"
+            if link_count > 0:
+                link_type = "" if self.config.get("filter_all") else "hoster "
+                link_type += "link" if link_count == 1 else "links"
                 self.log_warning(
                     "Blacklist filter removed {} {} containing {}".format(
-                        linkcount, linkstring, fltr
+                        link_count, link_type, fltr
                     )
                 )
 
-    def is_hoster_link(self, link):
-        # declare all links as hoster links so the filter will work on all links
+    def is_downloader_link(self, link):
         if self.config.get("filter_all"):
+            # declare all links as downloader links so the filter will work on all links
             return True
-        for item in self.pyload.plugin_manager.hoster_plugins.items():
+        for item in self.pyload.plugin_manager.downloader_plugins.items():
             if item[1]["re"].match(link):
                 return True
         return False

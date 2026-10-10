@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import json
 import os
 import urllib.parse
@@ -10,10 +8,8 @@ from ..base.decrypter import BaseDecrypter
 class DailymotionComFolder(BaseDecrypter):
     __name__ = "DailymotionComFolder"
     __type__ = "decrypter"
-    __version__ = "0.08"
+    __version__ = "0.09"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?dailymotion\.com/((playlists/)?(?P<TYPE>playlist|user)/)?(?P<ID>[\w^_]+)(?(TYPE)|#)"
     __config__ = [
@@ -31,15 +27,14 @@ class DailymotionComFolder(BaseDecrypter):
     __license__ = "GPLv3"
     __authors__ = [("Walter Purcaro", "vuolter@gmail.com")]
 
-    def api_response(self, ref, data=None):
-        url = urllib.parse.urljoin("https://api.dailymotion.com/", ref)
+    def api_request(self, method, data=None):
+        url = urllib.parse.urljoin("https://api.dailymotion.com/", method)
         html = self.load(url, get=data)
         return json.loads(html)
 
-    def get_playlist_info(self, id):
-        ref = "playlist/" + id
+    def get_playlist_info(self, playlist_id):
         data = {"fields": "name,owner.screenname"}
-        playlist = self.api_response(ref, data)
+        playlist = self.api_request("playlist/{}".format(playlist_id), data)
 
         if "error" in playlist:
             return
@@ -49,9 +44,8 @@ class DailymotionComFolder(BaseDecrypter):
         return name, owner
 
     def _get_playlists(self, user_id, page=1):
-        ref = "user/{}/playlists".format(user_id)
         data = {"fields": "id", "page": page, "limit": 100}
-        user = self.api_response(ref, data)
+        user = self.api_request("user/{}/playlists".format(user_id), data)
 
         if "error" in user:
             return
@@ -68,10 +62,9 @@ class DailymotionComFolder(BaseDecrypter):
             (id,) + self.get_playlist_info(id) for id in self._get_playlists(user_id)
         ]
 
-    def _get_videos(self, id, page=1):
-        ref = "playlist/{}/videos".format(id)
+    def _get_videos(self, video_id, page=1):
         data = {"fields": "url", "page": page, "limit": 100}
-        playlist = self.api_response(ref, data)
+        playlist = self.api_request("playlist/{}/videos".format(video_id), data)
 
         if "error" in playlist:
             return
@@ -80,7 +73,7 @@ class DailymotionComFolder(BaseDecrypter):
             yield video["url"]
 
         if playlist["has_more"]:
-            for item in self._get_videos(id, page + 1):
+            for item in self._get_videos(video_id, page + 1):
                 yield item
 
     def get_videos(self, playlist_id):
@@ -110,7 +103,6 @@ class DailymotionComFolder(BaseDecrypter):
                 self.pyload.config.get("general", "storage_folder"), p_owner, p_name
             )
             self.log_debug(
-                r'{} video\s found on playlist "{}"'.format(len(p_videos), p_name)
-            )
+                r'{} video\s found on playlist "{}"'.format(len(p_videos), p_name))
             # NOTE: Folder is NOT recognized by pyload 0.5.0!
             self.packages.append((p_name, p_videos, p_folder))

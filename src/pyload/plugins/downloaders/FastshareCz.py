@@ -1,8 +1,7 @@
-# -*- coding: utf-8 -*-
-
 import re
-import urllib.parse
 from datetime import timedelta
+
+from pyload.core.utils.convert import to_bytes
 
 from ..base.simple_downloader import SimpleDownloader
 
@@ -10,12 +9,10 @@ from ..base.simple_downloader import SimpleDownloader
 class FastshareCz(SimpleDownloader):
     __name__ = "FastshareCz"
     __type__ = "downloader"
-    __version__ = "0.44"
+    __version__ = "0.48"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
-    __pattern__ = r"https?://(?:www\.)?fastshare\.cz/\d+/.+"
+    __pattern__ = r"https?://(?:www\.)?fastshare\.(?:cz/\d+/.+|cloud/[0-9a-f]+)"
     __config__ = [
         ("enabled", "bool", "Activated", True),
         ("use_premium", "bool", "Use premium account if available", True),
@@ -41,8 +38,8 @@ class FastshareCz(SimpleDownloader):
     TEMP_OFFLINE_PATTERN = r"[^\w](503\s|[Mm]aint(e|ai)nance|[Tt]emp([.-]|orarily))"
     OFFLINE_PATTERN = r">(The file has been deleted|Requested page not found|This file is no longer available)"
 
-    LINK_FREE_PATTERN = r'href="(.+?)" id=free-trigger>'
-    LINK_PREMIUM_PATTERN = r"(https?://\w+\.fastshare\.cz/download\.php\?id=\d+&)"
+    LINK_FREE_PATTERN = r'form .*target="iframe_dwn" .*action=([^>]+)'
+    LINK_PREMIUM_PATTERN = r"(https?://\w+\.fastshare\.(?:cz|cloud)/download\.php\?id=\d+)&"
 
     SLOT_ERROR = "> 100% of FREE slots are full"
     CREDIT_ERROR = " credit for "
@@ -64,27 +61,32 @@ class FastshareCz(SimpleDownloader):
         if m is None:
             self.error(self._("LINK_FREE_PATTERN not found"))
 
-        self.link = urllib.parse.urljoin("https://fastshare.cz", m.group(1))
-        baseurl = "https://fastshare.cz"
+        self.link = self.fixurl(m.group(1))
 
     def check_download(self):
         check = self.scan_download(
             {
-                "paralell-dl": re.compile(
-                    r"<title>FastShare.cz</title>|<script>alert\('Pres FREE muzete stahovat jen jeden soubor najednou.'\)"
+                "parallel-dl": re.compile(
+                    rb"<title>FastShare.cz</title>|^<script|<script.*>alert\('Despite FREE can download only one file at a time.'\)"
                 ),
-                "wrong captcha": re.compile(r"Download for FREE"),
-                "credit": re.compile(self.CREDIT_ERROR),
+                "wrong captcha": re.compile(rb"Download for FREE"),
+                "credit": re.compile(to_bytes(self.CREDIT_ERROR)),
             }
         )
 
-        if check == "paralell-dl":
-            self.retry(6, timedelta(minutes=10).seconds, self._("Paralell download"))
+        if check == "parallel-dl":
+            self.log_warning(self._("Parallel download"))
+            self.remove(self.last_download)
+            self.retry(6, timedelta(minutes=2).total_seconds(), self._("Paralell download"))
 
         elif check == "wrong captcha":
+            self.log_warning(self._("Wrong captcha"))
+            self.remove(self.last_download)
             self.retry_captcha()
 
         elif check == "credit":
+            self.log_warning(self._("Out of credit"))
+            self.remove(self.last_download)
             self.restart(premium=False)
 
         return SimpleDownloader.check_download(self)

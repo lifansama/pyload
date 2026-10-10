@@ -1,22 +1,17 @@
-# -*- coding: utf-8 -*-
-
 import json
 
 from ..base.multi_account import MultiAccount
-from ..helpers import set_cookie
 
 
 class SimplyPremiumCom(MultiAccount):
     __name__ = "SimplyPremiumCom"
     __type__ = "account"
-    __version__ = "0.14"
+    __version__ = "0.16"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
     __config__ = [
-        ("mh_mode", "all;listed;unlisted", "Filter hosters to use", "all"),
-        ("mh_list", "str", "Hoster list (comma separated)", ""),
+        ("mh_mode", "all;listed;unlisted", "Filter downloaders to use", "all"),
+        ("mh_list", "str", "Downloader list (comma separated)", ""),
         ("mh_interval", "int", "Reload interval in hours", 12),
     ]
 
@@ -26,7 +21,7 @@ class SimplyPremiumCom(MultiAccount):
 
     def grab_hosters(self, user, password, data):
         json_data = self.load(
-            "http://www.simply-premium.com/api/hosts.php",
+            "https://www.simply-premium.com/api/hosts.php",
             get={"format": "json", "online": 1},
         )
         json_data = json.loads(json_data)
@@ -40,7 +35,7 @@ class SimplyPremiumCom(MultiAccount):
         validuntil = -1
         trafficleft = None
 
-        json_data = self.load("http://www.simply-premium.com/api/user.php?format=json")
+        json_data = self.load("https://www.simply-premium.com/api/user.php?format=json")
 
         self.log_debug(f"JSON data: {json_data}")
 
@@ -56,8 +51,7 @@ class SimplyPremiumCom(MultiAccount):
             "remain_traffic" in json_data["result"]
             and json_data["result"]["remain_traffic"]
         ):
-            # TODO: Remove `>> 10` in 0.6.x
-            trafficleft = float(json_data["result"]["remain_traffic"]) >> 10
+            trafficleft = float(json_data["result"]["remain_traffic"])
 
         return {
             "premium": premium,
@@ -66,7 +60,7 @@ class SimplyPremiumCom(MultiAccount):
         }
 
     def signin(self, user, password, data):
-        set_cookie(self.req.cj, "simply-premium.com", "lang", "EN")
+        self.req.cj.set_cookie("simply-premium.com", "lang", "EN")
 
         html = self.load(
             "https://www.simply-premium.com/login.php",

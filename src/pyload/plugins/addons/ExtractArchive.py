@@ -1,8 +1,7 @@
-# -*- coding: utf-8 -*-
-
 import os
+from builtins import NameError
 
-from pyload.core.utils.old import safename
+from pyload.core.utils.fs import safename
 from pyload.core.utils.purge import uniquify
 
 from ..base.addon import BaseAddon, expose, threaded
@@ -12,21 +11,27 @@ from ..helpers import exists
 try:
     import send2trash
 except ImportError:
-    send2trash = None
+    pass
 
 
 class ArchiveQueue:
     def __init__(self, plugin, storage):
         self.plugin = plugin
         self.storage = storage
+        self.length = 0
+
+    def __len__(self):
+        return self.length
 
     def get(self):
         return self.plugin.db.retrieve(self.storage, default=[])
 
     def set(self, value):
+        self.length = len(value)
         return self.plugin.db.store(self.storage, value)
 
     def delete(self):
+        self.length = 0
         return self.plugin.db.delete(self.storage)
 
     def add(self, item):
@@ -44,7 +49,7 @@ class ArchiveQueue:
         except ValueError:
             pass
 
-        if queue is []:
+        if not queue:
             return self.delete()
 
         return self.set(queue)
@@ -53,10 +58,8 @@ class ArchiveQueue:
 class ExtractArchive(BaseAddon):
     __name__ = "ExtractArchive"
     __type__ = "addon"
-    __version__ = "1.67"
+    __version__ = "1.74"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __config__ = [
         ("enabled", "bool", "Activated", False),
@@ -74,7 +77,7 @@ class ExtractArchive(BaseAddon):
             "extensions",
             "str",
             "Extract archives ending with extension",
-            "7z,bz2,bzip2,gz,gzip,lha,lzh,lzma,rar,tar,taz,tbz,tbz2,tgz,xar,xz,z,zip",
+            "001,7z,bz2,bzip2,gz,gzip,lha,lzh,lzma,rar,tar,taz,tbz,tbz2,tgz,xar,xz,z,zip",
         ),
         (
             "excludefiles",
@@ -102,19 +105,18 @@ class ExtractArchive(BaseAddon):
         }
 
         self.queue = ArchiveQueue(self, "Queue")
-        self.failed = ArchiveQueue(self, "Failed")
 
         self.extracting = False
+        self.extracted = 0
         self.last_package = False
         self.extractors = []
         self.passwords = []
         self.repair = False
 
     def activate(self):
-        for p in ("UnRar", "SevenZip", "UnZip", "UnTar"):
+        for p in ("HjSplit", "UnRar", "SevenZip", "UnZip", "UnTar"):
             try:
-                module = self.pyload.plugin_manager.load_module("base", p)
-                klass = getattr(module, p)
+                klass = self.pyload.plugin_manager.load_class("extractor", p)
                 if klass.find():
                     self.extractors.append(klass)
                 if klass.REPAIR:
@@ -150,31 +152,19 @@ class ExtractArchive(BaseAddon):
 
         packages = self.queue.get()
         while packages:
-            if self.last_package:  #: Called from all_downloads_processed
+            if self.extract(packages, thread):
+                self.extracted += 1
+
+            if self.last_package and len(self.queue) == 0:  #: last_package is set by all_downloads_processed()
                 self.last_package = False
-                if self.extract(
-                    packages, thread
-                ):  # NOTE: check only if all gone fine, no failed reporting for now
+                if self.extracted:
+                    self.extracted = 0
                     self.m.dispatch_event("all_archives_extracted")
                 self.m.dispatch_event("all_archives_processed")
-
-            else:
-                if self.extract(
-                    packages, thread
-                ):  # NOTE: check only if all gone fine, no failed reporting for now
-                    pass
 
             packages = self.queue.get()  #: Check for packages added during extraction
 
         self.extracting = False
-
-    #: Deprecated method, use `extract_package` instead
-    @expose
-    def extract_package(self, *args, **kwargs):
-        """
-        See `extract_package`
-        """
-        return self.extract_package(*args, **kwargs)
 
     @expose
     def extract_package(self, *ids):
@@ -201,9 +191,9 @@ class ExtractArchive(BaseAddon):
 
     @expose
     def extract(
-        self, ids, thread=None
+        self, package_ids, thread=None
     ):  # TODO: Use pypack, not pid to improve method usability
-        if not ids:
+        if not package_ids:
             return False
 
         extracted = []
@@ -234,11 +224,11 @@ class ExtractArchive(BaseAddon):
         dl_folder = self.pyload.config.get("general", "storage_folder")
 
         #: Iterate packages -> extractors -> targets
-        for pid in ids:
-            pypack = self.pyload.files.get_package(pid)
+        for package_id in package_ids:
+            pypack = self.pyload.files.get_package(package_id)
 
             if not pypack:
-                self.queue.remove(pid)
+                self.queue.remove(package_id)
                 continue
 
             self.log_info(self._("Check package: {}").format(pypack.name))
@@ -258,9 +248,11 @@ class ExtractArchive(BaseAddon):
                     pypack.folder or safename(pypack.name.replace("http://", "")),
                 )
 
-            os.makedirs(extract_folder, exist_ok=True)
-            if subfolder:
-                self.set_permissions(extract_folder)
+            if not exists(extract_folder):
+                os.makedirs(extract_folder)
+
+                if subfolder:
+                    self.set_permissions(extract_folder)
 
             matched = False
             success = True
@@ -273,7 +265,7 @@ class ExtractArchive(BaseAddon):
                     )
                     for fdata in pypack.get_children().values()
                 }.values()
-            )  #: : Remove duplicates
+            )  #: Remove duplicates
 
             #: Check as long there are unseen files
             while files_ids:
@@ -291,7 +283,7 @@ class ExtractArchive(BaseAddon):
                         )
                     ]
 
-                #: Sort by filename to ensure (or at least try) that a multivolume archive is targeted by its first part
+                #: Sort by filename to ensure (or at least try) that a multi-volume archive is targeted by its first part
                 #: This is important because, for example, UnRar ignores preceding parts in listing mode
                 files_ids.sort(key=lambda file_id: file_id[1])
 
@@ -304,12 +296,11 @@ class ExtractArchive(BaseAddon):
                         matched = True
 
                         for fid, fname, fout in targets:
-                            name = os.path.basename(fname)
-
                             if not exists(fname):
-                                self.log_debug(name, "File not found")
+                                self.log_debug(fname, "File not found")
                                 continue
 
+                            name = os.path.basename(fname)
                             self.log_info(name, self._("Extract to: {}").format(fout))
                             try:
                                 pyfile = self.pyload.files.get_file(fid)
@@ -345,40 +336,34 @@ class ExtractArchive(BaseAddon):
                                 success = False
                                 continue
 
-                            #: Remove processed file and related multiparts from list
+                            #: Remove processed file and related multi-parts from list
                             files_ids = [
-                                (fid, fname, fout)
-                                for fid, fname, fout in files_ids
-                                if fname not in chunks
+                                (_fid, _fname, _fout)
+                                for _fid, _fname, _fout in files_ids
+                                if _fname not in chunks
                             ]
                             self.log_debug(f"Extracted files: {new_files}")
 
-                            new_folders = uniquify(
-                                os.path.dirname(f) for f in new_files
-                            )
+                            new_folders = []
+                            for _f in new_files:
+                                _d = os.path.dirname(_f)
+                                while extract_folder in _d:
+                                    if _d not in new_folders:
+                                        new_folders.append(_d)
+                                    _d = os.path.dirname(_d)
+
                             for foldername in new_folders:
-                                self.set_permissions(
-                                    os.path.join(extract_folder, foldername)
-                                )
+                                self.set_permissions(foldername)
 
                             for filename in new_files:
-                                self.set_permissions(
-                                    os.path.join(extract_folder, filename)
-                                )
+                                self.set_permissions(filename)
 
                             for filename in new_files:
-                                file = os.fsdecode(
-                                    os.path.join(
-                                        os.path.dirname(archive.filename), filename
-                                    )
-                                )
-                                if not exists(file):
-                                    self.log_debug(
-                                        "New file {} does not exists".format(filename)
-                                    )
+                                if not exists(filename):
+                                    self.log_debug(f"New file {filename} does not exists")
                                     continue
 
-                                if recursive and os.path.isfile(file):
+                                if recursive and os.path.isfile(filename):
                                     new_files_ids.append(
                                         (fid, filename, os.path.dirname(filename))
                                     )  #: Append as new target
@@ -417,14 +402,13 @@ class ExtractArchive(BaseAddon):
                                     )
                                 )
 
-                    extracted.append(pid)
+                    extracted.append(package_id)
                     self.m.dispatch_event("package_extracted", pypack)
 
                 else:
-                    failed.append(pid)
+                    failed.append(package_id)
                     self.m.dispatch_event("package_extract_failed", pypack)
 
-                    self.failed.add(pid)
             else:
                 self.log_info(self._("No files found to extract"))
 
@@ -435,9 +419,11 @@ class ExtractArchive(BaseAddon):
                 except OSError:
                     pass
 
-            self.queue.remove(pid)
+            self.queue.remove(package_id)
 
-        return True if not failed else False
+            self.m.dispatch_event("archive_processed", pypack)
+
+        return True if extracted else False
 
     def _extract(self, pyfile, archive, password):
         name = os.path.basename(archive.filename)
@@ -457,6 +443,7 @@ class ExtractArchive(BaseAddon):
                 try:
                     pyfile.set_custom_status(self._("archive testing"))
                     pyfile.set_progress(0)
+                    self.log_debug("Verifying using password: {}".format(pw or "None"))
                     archive.verify(pw)
                     pyfile.set_progress(100)
 
@@ -464,6 +451,7 @@ class ExtractArchive(BaseAddon):
                     if not encrypted:
                         self.log_info(name, self._("Password protected"))
                         encrypted = True
+                    self.log_debug("Password was wrong")
 
                 except CRCError as exc:
                     self.log_debug(name, exc)
@@ -484,6 +472,7 @@ class ExtractArchive(BaseAddon):
 
                         else:
                             self.add_password(pw)
+                            password = pw
                             break
 
                 except ArchiveError as exc:
@@ -491,36 +480,26 @@ class ExtractArchive(BaseAddon):
 
                 else:
                     self.add_password(pw)
+                    password = pw
+                    self.log_debug("Password Correct")
                     break
 
-            pyfile.set_custom_status(self._("archive extracting"))
-            pyfile.set_progress(0)
-
-            if not encrypted or not self.config.get("usepasswordfile"):
-                self.log_debug(
-                    "Extracting using password: {}".format(password or "None")
-                )
-                archive.extract(password)
             else:
-                for pw in [
-                    f for f in uniquify([password] + self.get_passwords(False)) if f
-                ]:
-                    try:
-                        self.log_debug(f"Extracting using password: {pw}")
-
-                        archive.extract(pw)
-                        self.add_password(pw)
-                        break
-
-                    except PasswordError:
-                        self.log_debug("Password was wrong")
-                else:
+                if encrypted:
                     raise PasswordError
 
+            pyfile.set_custom_status(self._("archive extracting"))
+
+            pyfile.set_progress(0)
+            self.log_debug(
+                "Extracting using password: {}".format(password or "None")
+            )
+            archive.extract(password)
             pyfile.set_progress(100)
+
             pyfile.set_status("processing")
 
-            extracted_files = archive.files or archive.list()
+            extracted_files = archive.files or archive.list(password)
 
             delfiles = archive.chunks()
             self.log_debug("Would delete: " + ", ".join(delfiles))
@@ -541,12 +520,12 @@ class ExtractArchive(BaseAddon):
                         try:
                             send2trash.send2trash(file)
 
-                        except AttributeError:
+                        except NameError:
                             self.log_warning(
                                 self._("Unable to move {} to trash").format(
                                     os.path.basename(f)
                                 ),
-                                self._("Send2Trash lib not found"),
+                                self._("Send2Trash lib not installed"),
                             )
 
                         except Exception as exc:
@@ -584,15 +563,6 @@ class ExtractArchive(BaseAddon):
 
         raise Exception(self._("Extract failed"))
 
-    #: Deprecated method, use `get_passwords` instead
-    @expose
-    def get_passwords(self, *args, **kwargs):
-        """
-        See `get_passwords`
-        """
-        return self.get_passwords(*args, **kwargs)
-
-    @expose
     def get_passwords(self, reload=True):
         """
         List of saved passwords.
@@ -607,13 +577,13 @@ class ExtractArchive(BaseAddon):
             passwords = []
 
             file = os.fsdecode(self.config.get("passwordfile"))
-            with open(file) as fp:
+            with open(file, encoding="utf-8-sig") as fp:
                 for pw in fp.read().splitlines():
                     passwords.append(pw)
 
         except IOError as exc:
             if exc.errno == 2:
-                fp = open(file, mode="w")
+                fp = open(file, mode="w", encoding="utf-8-sig")
                 fp.close()
 
             else:
@@ -621,14 +591,6 @@ class ExtractArchive(BaseAddon):
 
         else:
             self.passwords = passwords
-
-    #: Deprecated method, use `add_password` instead
-    @expose
-    def add_password(self, *args, **kwargs):
-        """
-        See `add_password`
-        """
-        return self.add_password(*args, **kwargs)
 
     @expose
     def add_password(self, password):
@@ -639,7 +601,7 @@ class ExtractArchive(BaseAddon):
             self.passwords = uniquify([password] + self.passwords)
 
             file = os.fsdecode(self.config.get("passwordfile"))
-            with open(file, mode="wb") as fp:
+            with open(file, mode="w", encoding="utf-8-sig") as fp:
                 for pw in self.passwords:
                     fp.write(pw + "\n")
 

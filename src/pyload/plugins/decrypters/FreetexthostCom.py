@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import re
 
 from ..base.simple_decrypter import SimpleDecrypter
@@ -9,8 +8,6 @@ class FreetexthostCom(SimpleDecrypter):
     __type__ = "decrypter"
     __version__ = "0.06"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://(?:www\.)?freetexthost\.com/\w+"
     __config__ = [

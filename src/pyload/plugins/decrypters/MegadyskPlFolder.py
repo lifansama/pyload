@@ -1,11 +1,7 @@
-# -*- coding: utf-8 -*-
-
 import base64
 import json
 import re
 import urllib.parse
-
-from pyload.core.network.request_factory import get_url
 
 from ..base.simple_decrypter import SimpleDecrypter
 
@@ -23,10 +19,8 @@ def xor_decrypt(data, key):
 class MegadyskPlFolder(SimpleDecrypter):
     __name__ = "MegadyskPlFolder"
     __type__ = "decrypter"
-    __version__ = "0.03"
+    __version__ = "0.04"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?megadysk\.pl/(?:f|s)/.+"
     __config__ = [
@@ -45,9 +39,8 @@ class MegadyskPlFolder(SimpleDecrypter):
     __license__ = "GPLv3"
     __authors__ = [("GammaC0de", "nitzo2001[AT]yahoo[DOT]com")]
 
-    @classmethod
-    def api_info(cls, url):
-        html = get_url(url)
+    def api_info(self, url):
+        html = self.load(url)
         info = {}
 
         m = re.search(r"window\['.*?'\]\s*=\s*\"(.*?)\"", html)
@@ -58,7 +51,7 @@ class MegadyskPlFolder(SimpleDecrypter):
 
         encrypted_info = m.group(1)
 
-        html = get_url("https://megadysk.pl/dist/index.js")
+        html = self.load("https://megadysk.pl/dist/index.js")
 
         m = re.search(r't.ISK\s*=\s*"(\w+)"', html)
         if m is None:

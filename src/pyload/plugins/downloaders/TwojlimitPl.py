@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import json
 
 from ..base.multi_downloader import MultiDownloader
@@ -7,10 +6,8 @@ from ..base.multi_downloader import MultiDownloader
 class TwojlimitPl(MultiDownloader):
     __name__ = "TwojlimitPl"
     __type__ = "downloader"
-    __version__ = "0.01"
+    __version__ = "0.02"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"^unmatchable$"
     __config__ = [
@@ -89,7 +86,7 @@ class TwojlimitPl(MultiDownloader):
         pyfile.size = json_data["filesize"]
 
         try:
-            self.download(self.run_file_query(pyfile.url, "filedownload"), fixurl=False)
+            self.download(self.run_file_query(pyfile.url, "filedownload"))
 
         except Exception as exc:
             self.log_error(exc)
@@ -99,7 +96,7 @@ class TwojlimitPl(MultiDownloader):
         query = self.API_QUERY.copy()
 
         query["username"] = self.account.user
-        query["password"] = self.account.info["data"]["hash_password"]
+        query["password"] = self.account.get_data("hash_password")
         query["url"] = url
 
         if mode == "fileinfo":

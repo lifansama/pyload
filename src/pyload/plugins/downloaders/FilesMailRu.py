@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import re
 
 from ..base.downloader import BaseDownloader
@@ -9,8 +8,6 @@ class FilesMailRu(BaseDownloader):
     __type__ = "downloader"
     __version__ = "0.41"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://(?:www\.)?files\.mail\.ru/.+"
     __config__ = [("enabled", "bool", "Activated", True)]
@@ -92,7 +89,7 @@ class FilesMailRu(BaseDownloader):
         #: so i set it to check every download because sometimes there are downloads
         #: that contain the HTML-Text and 60MB ZEROs after that in a xyzfile.part1.rar file
         #: (Loading 100MB in to ram is not an option)
-        if self.scan_download({"html": "<meta name="}, read_size=50000) == "html":
+        if self.scan_download({"html": b"<meta name="}, read_size=50000) == "html":
             self.log_info(
                 self._(
                     "There was HTML Code in the Downloaded File ({})...redirect error? The Download will be restarted"

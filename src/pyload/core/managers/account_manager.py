@@ -1,11 +1,8 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: RaNaN
-
 import os
 import shutil
-from threading import Lock
+from threading import RLock
 
-from ..utils.old import lock
+from ..utils.struct.lock import lock
 from .event_manager import AccountUpdateEvent
 
 # MANAGER VERSION
@@ -24,13 +21,13 @@ class AccountManager:
         """
         self.pyload = core
         self._ = core._
-        self.lock = Lock()
+        self.lock = RLock()
 
         # TODO: Recheck
         configdir = os.path.join(core.userdir, "settings")
         os.makedirs(configdir, exist_ok=True)
 
-        self.configpath = os.path.join(configdir, "accounts.conf")
+        self.configpath = os.path.join(configdir, "accounts.cfg")
 
         self.init_plugins()
         self.save_accounts()  #: save to add categories to conf
@@ -42,17 +39,22 @@ class AccountManager:
         self.init_account_plugins()
         self.load_accounts()
 
+    @lock
     def get_account_plugin(self, plugin):
         """
         get account instance for plugin or None if anonymous.
         """
         if plugin in self.accounts:
             if plugin not in self.plugins:
-                self.plugins[plugin] = self.pyload.plugin_manager.load_class(
-                    "account", plugin
-                )(self, self.accounts[plugin])
+                klass = self.pyload.plugin_manager.load_class("account", plugin)
+                if klass:
+                    self.plugins[plugin] = klass(self, self.accounts[plugin])
+
+                else:
+                    return None
 
             return self.plugins[plugin]
+
         else:
             return None
 
@@ -73,16 +75,16 @@ class AccountManager:
         loads all accounts available.
         """
         if not os.path.exists(self.configpath):
-            with open(self.configpath, mode="w") as fp:
+            with open(self.configpath, mode="w", encoding="utf-8") as fp:
                 fp.write(f"version: {__version__}")
 
-        with open(self.configpath) as fp:
+        with open(self.configpath, encoding="utf-8") as fp:
             content = fp.readlines()
             version = content[0].split(":")[1].strip() if content else ""
 
         if not version or int(version) < __version__:
             shutil.copy(self.configpath, "accounts.backup")
-            with open(self.configpath, mode="w") as fp:
+            with open(self.configpath, mode="w", encoding="utf-8") as fp:
                 fp.write(f"version: {__version__}")
             self.pyload.log.warning(
                 self._("Account settings deleted, due to new config format.")
@@ -119,6 +121,8 @@ class AccountManager:
 
             elif ":" in line:
                 name, sep, pw = line.partition(":")
+                name = name.replace(r"\x3a", ":")
+                pw = pw.replace(r"\x3a", ":")
                 self.accounts[plugin][name] = {
                     "password": pw,
                     "options": {},
@@ -131,20 +135,24 @@ class AccountManager:
         """
         save all account information.
         """
-        with open(self.configpath, mode="w") as fp:
+        account_plugins = self.pyload.plugin_manager.get_account_plugins()
+        with open(self.configpath, mode="w", encoding="utf-8") as fp:
             fp.write(f"version: {__version__}\n")
 
-            for plugin, accounts in self.accounts.items():
-                fp.write("\n")
-                fp.write(plugin + ":\n")
+            for plugin, accounts in sorted(self.accounts.items()):
+                if plugin in account_plugins:
+                    fp.write("\n")
+                    fp.write(plugin + ":\n")
 
-                for name, data in accounts.items():
-                    pw = data["password"]
-                    fp.write(f"\n\t{name}:{pw}\n")
-                    if data["options"]:
-                        for option, values in data["options"].items():
-                            line = " ".join(values)
-                            fp.write(f"\t@{option} {line}\n")
+                    for name, data in accounts.items():
+                        pw = data["password"]
+                        name = name.replace(":", r"\x3a")
+                        pw = pw.replace(":", r"\x3a")
+                        fp.write(f"\n\t{name}:{pw}\n")
+                        if data["options"]:
+                            for option, values in data["options"].items():
+                                line = " ".join(values)
+                                fp.write(f"\t@{option} {line}\n")
             os.chmod(fp.name, 0o600)
 
     # ----------------------------------------------------------------------
@@ -157,19 +165,20 @@ class AccountManager:
             self.accounts[name] = {}
 
     @lock
-    def update_account(self, plugin, user, password=None, options={}):
+    def update_account(self, plugin, user, password=None, options=None):
         """
-        add or update account.
+        add or update an account.
         """
-        if plugin in self.accounts:
+        if plugin in self.accounts and user:
             p = self.get_account_plugin(plugin)
-            updated = p.update_accounts(user, password, options)
-            # since accounts is a ref in plugin self.accounts doesnt need to be
-            # updated here
+            if p is not None:
+                updated = p.update_accounts(user, password, options)
+                # since accounts is a ref in plugin self.accounts doesn't need to be
+                # updated here
 
-            self.save_accounts()
-            if updated:
-                p.schedule_refresh(user, force=False)
+                self.save_accounts()
+                if updated:
+                    p.schedule_refresh(user, force=False)
 
     @lock
     def remove_account(self, plugin, user):
@@ -192,12 +201,17 @@ class AccountManager:
             )
             force = False
 
-        for p in self.accounts.keys():
-            if self.accounts[p]:
-                p = self.get_account_plugin(p)
-                data[p.__name__] = p.get_all_accounts(force)
+        for acc in self.accounts.keys():
+            if self.accounts[acc]:
+                plugin = self.get_account_plugin(acc)
+                if plugin is not None:
+                    data[plugin.__name__] = plugin.get_all_accounts(force)
+                else:
+                    self.pyload.log.error(self._("Bad or missing plugin: ACCOUNT {}").format(acc))
+                    data[acc] = []
+
             else:
-                data[p] = []
+                data[acc] = []
         e = AccountUpdateEvent()
         self.pyload.event_manager.add_event(e)
         return data

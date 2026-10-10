@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-
-
 import pycurl
 from pyload.core.network.http.exceptions import BadHeader
 from pyload.core.network.request_factory import get_request
@@ -27,8 +24,6 @@ class BypassCaptcha(BaseAddon):
     __type__ = "addon"
     __version__ = "0.14"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __config__ = [
         ("enabled", "bool", "Activated", False),

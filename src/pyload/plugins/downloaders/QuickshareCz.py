@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 from datetime import timedelta
 
@@ -11,8 +9,6 @@ class QuickshareCz(SimpleDownloader):
     __type__ = "downloader"
     __version__ = "0.64"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://(?:[^/]*\.)?quickshare\.cz/stahnout-soubor/.+"
     __config__ = [
@@ -63,7 +59,7 @@ class QuickshareCz(SimpleDownloader):
         else:
             self.handle_free(pyfile)
 
-        if self.scan_download({"error": re.compile(r"\AChyba!")}, read_size=100):
+        if self.scan_download({"error": re.compile(rb"\AChyba!")}, read_size=100):
             self.fail(self._("File not found or plugin defect"))
 
     def handle_free(self, pyfile):
@@ -86,7 +82,7 @@ class QuickshareCz(SimpleDownloader):
         if m is not None:
             if m.group(1) == "1":
                 self.retry(
-                    60, timedelta(minutes=2).seconds, "This IP is already downloading"
+                    60, timedelta(minutes=2).total_seconds(), "This IP is already downloading"
                 )
             elif m.group(1) == "2":
                 self.retry(60, 60, "No free slots available")

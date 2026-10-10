@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import os
 import re
 
@@ -12,8 +10,6 @@ class MirrorcreatorCom(BaseDecrypter):
     __type__ = "decrypter"
     __version__ = "0.03"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?(?:mirrorcreator\.com/(?:files/|download\.php\?uid=)|mir\.cr/)(?P<ID>\w{8})"
     __config__ = [

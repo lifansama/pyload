@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 from datetime import timedelta
 
@@ -28,8 +26,6 @@ class FilefactoryCom(SimpleDownloader):
     __type__ = "downloader"
     __version__ = "0.64"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?filefactory\.com/(file|trafficshare/\w+)/\w+"
     __config__ = [
@@ -64,7 +60,7 @@ class FilefactoryCom(SimpleDownloader):
             self.fail(self._("File too large for free download"))
         elif "All free download slots on this server are currently in use" in self.data:
             self.retry(
-                50, timedelta(minutes=15).seconds, self._("All free slots are busy")
+                50, timedelta(minutes=15).total_seconds(), self._("All free slots are busy")
             )
 
         m = re.search(self.LINK_FREE_PATTERN, self.data)
@@ -80,15 +76,15 @@ class FilefactoryCom(SimpleDownloader):
     def check_download(self):
         check = self.scan_download(
             {
-                "multiple": "You are currently downloading too many files at once.",
-                "error": '<div id="errorMessage">',
+                "multiple": b"You are currently downloading too many files at once.",
+                "error": b'<div id="errorMessage">',
             }
         )
 
         if check == "multiple":
             self.log_debug("Parallel downloads detected; waiting 15 minutes")
             self.retry(
-                wait=timedelta(minutes=15).seconds, msg=self._("Parallel downloads")
+                wait=timedelta(minutes=15).total_seconds(), msg=self._("Parallel downloads")
             )
 
         elif check == "error":

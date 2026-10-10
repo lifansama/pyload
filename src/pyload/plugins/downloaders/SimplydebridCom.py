@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from datetime import timedelta
 
 from ..base.multi_downloader import MultiDownloader
@@ -11,8 +9,6 @@ class SimplydebridCom(MultiDownloader):
     __type__ = "downloader"
     __version__ = "0.27"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/sd\.php"
     __config__ = [
@@ -56,7 +52,7 @@ class SimplydebridCom(MultiDownloader):
         self.wait(5)
 
     def check_download(self):
-        if self.scan_download({"error": "No address associated with hostname"}):
-            self.retry(24, timedelta(minutes=3).seconds, self._("Bad file downloaded"))
+        if self.scan_download({"error": b"No address associated with hostname"}):
+            self.retry(24, timedelta(minutes=3).total_seconds(), self._("Bad file downloaded"))
 
         return MultiDownloader.check_download(self)

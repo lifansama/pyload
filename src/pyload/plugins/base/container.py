@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import os
 import urllib.parse
 
@@ -8,11 +7,9 @@ from .decrypter import BaseDecrypter
 
 class BaseContainer(BaseDecrypter):
     __name__ = "Container"
-    __type__ = "container"
-    __version__ = "0.14"
+    __type__ = "base"
+    __version__ = "0.15"
     __status__ = "stable"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"^unmatchable$"
     __config__ = [
@@ -62,10 +59,11 @@ class BaseContainer(BaseDecrypter):
         if remote:
             content = self.load(self.pyfile.url)
 
+            upload_path = os.path.join(self.pyload.tempdir, "upload")
+            os.makedirs(upload_path, exist_ok=True)
+
             self.pyfile.name = "tmp_" + self.pyfile.name
-            self.pyfile.url = os.path.join(
-                self.pyload.config.get("general", "storage_folder"), self.pyfile.name
-            )
+            self.pyfile.url = os.path.join(upload_path, self.pyfile.name)
 
             try:
                 with open(self.pyfile.url, mode="wb") as fp:

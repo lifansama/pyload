@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 
 from ..base.xfs_decrypter import XFSDecrypter
@@ -8,10 +6,8 @@ from ..base.xfs_decrypter import XFSDecrypter
 class XFileSharingFolder(XFSDecrypter):
     __name__ = "XFileSharingFolder"
     __type__ = "decrypter"
-    __version__ = "0.25"
+    __version__ = "0.26"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"^unmatchable$"
     __config__ = [
@@ -35,7 +31,7 @@ class XFileSharingFolder(XFSDecrypter):
         return super()._log(level, plugintype, pluginname, args, kwargs)
 
     def init(self):
-        self.__pattern__ = self.pyload.plugin_manager.crypter_plugins[self.classname][
+        self.__pattern__ = self.pyload.plugin_manager.decrypter_plugins[self.classname][
             "pattern"
         ]
 
@@ -57,7 +53,7 @@ class XFileSharingFolder(XFSDecrypter):
                 self.PLUGIN_NAME, self.account.user
             )
             # NOTE: Don't call get_info here to reduce overhead
-            self.premium = self.account.info["data"]["premium"]
+            self.premium = self.account.get_data("premium")
         else:
             self.req = self.pyload.request_factory.get_request(self.classname)
             self.premium = False

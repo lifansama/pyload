@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 import urllib.parse
 from datetime import timedelta
@@ -12,8 +10,6 @@ class FlyFilesNet(SimpleDownloader):
     __type__ = "downloader"
     __version__ = "0.15"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://(?:www\.)?flyfiles\.net/.+"
     __config__ = [
@@ -47,7 +43,7 @@ class FlyFilesNet(SimpleDownloader):
             self.log_warning(
                 self._("Could not get the download URL. Please wait 10 minutes")
             )
-            self.wait(timedelta(minutes=10).seconds, True)
+            self.wait(timedelta(minutes=10).total_seconds(), True)
             self.retry()
 
         self.link = parsed_url.replace("#downlink|", "")

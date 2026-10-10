@@ -1,9 +1,5 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: RaNaN, mkaay
-
-
 from ..managers.event_manager import UpdateEvent
-from ..utils.old import safepath
+from ..utils.fs import safepath
 
 
 class PyPackage:

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 
 from ..base.xfs_downloader import XFSDownloader
@@ -10,8 +8,6 @@ class UploadrocketNet(XFSDownloader):
     __type__ = "downloader"
     __version__ = "0.02"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://(?:www\.)?uploadrocket\.net/\w{12}"
     __config__ = [
@@ -64,7 +60,7 @@ class UploadrocketNet(XFSDownloader):
         url,
         get={},
         post={},
-        ref=True,
+        referrer=True,
         cookies=True,
         disposition=True,
         resume=None,
@@ -76,4 +72,4 @@ class UploadrocketNet(XFSDownloader):
         if m is not None and m.group(1):
             self.pyfile.name = m.group(1)
 
-        super().download(url, get, post, ref, cookies, disposition, resume, chunks)
+        super().download(url, get, post, referrer, cookies, disposition, resume, chunks)

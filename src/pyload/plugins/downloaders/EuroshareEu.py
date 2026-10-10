@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 from datetime import timedelta
 
@@ -11,8 +9,6 @@ class EuroshareEu(SimpleDownloader):
     __type__ = "downloader"
     __version__ = "0.41"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://(?:www\.)?euroshare\.(eu|sk|cz|hu|pl)/file/.+"
     __config__ = [
@@ -50,7 +46,7 @@ class EuroshareEu(SimpleDownloader):
     def handle_free(self, pyfile):
         if re.search(self.DL_LIMIT_PATTERN, self.data):
             self.retry(
-                timedelta(minutes=5).seconds, 12, self._("Download limit reached")
+                timedelta(minutes=5).total_seconds(), 12, self._("Download limit reached")
             )
 
         self.data = self.load(pyfile.url, get={"download": "true"})

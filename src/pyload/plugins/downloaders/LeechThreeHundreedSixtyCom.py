@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import json
 
 from pyload.core.utils import parse
@@ -12,8 +10,6 @@ class LeechThreeHundreedSixtyCom(MultiDownloader):
     __type__ = "downloader"
     __version__ = "0.01"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"^unmatchable$"
     __config__ = [
@@ -32,7 +28,7 @@ class LeechThreeHundreedSixtyCom(MultiDownloader):
     def handle_premium(self, pyfile):
         json_data = self.load(
             "https://leech360.com/generate",
-            get={"token": self.account.info["data"]["token"], "link": pyfile.url},
+            get={"token": self.account.get_data("token"), "link": pyfile.url},
         )
         api_data = json.loads(json_data)
 

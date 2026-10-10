@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 
 from ..base.account import BaseAccount
@@ -10,8 +8,6 @@ class QuickshareCz(BaseAccount):
     __type__ = "account"
     __version__ = "0.11"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __description__ = """Quickshare.cz account plugin"""
     __license__ = "GPLv3"

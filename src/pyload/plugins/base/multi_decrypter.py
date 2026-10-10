@@ -1,15 +1,11 @@
-# -*- coding: utf-8 -*-
-
 from .simple_decrypter import SimpleDecrypter
 
 
 class MultiDecrypter(SimpleDecrypter):
     __name__ = "MultiDecrypter"
     __type__ = "downloader"
-    __version__ = "0.10"
+    __version__ = "0.11"
     __status__ = "stable"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"^unmatchable$"
     __config__ = [
@@ -28,7 +24,7 @@ class MultiDecrypter(SimpleDecrypter):
     __authors__ = [("Walter Purcaro", "vuolter@gmail.com")]
 
     def init(self):
-        self.PLUGIN_NAME = self.pyload.plugin_manager.crypter_plugins.get(
+        self.PLUGIN_NAME = self.pyload.plugin_manager.decrypter_plugins.get(
             self.classname
         )["name"]
 

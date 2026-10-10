@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import json
 
 from ..base.multi_account import MultiAccount
@@ -8,14 +6,12 @@ from ..base.multi_account import MultiAccount
 class LinksnappyCom(MultiAccount):
     __name__ = "LinksnappyCom"
     __type__ = "account"
-    __version__ = "0.17"
+    __version__ = "0.22"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
     __config__ = [
-        ("mh_mode", "all;listed;unlisted", "Filter hosters to use", "all"),
-        ("mh_list", "str", "Hoster list (comma separated)", ""),
+        ("mh_mode", "all;listed;unlisted", "Filter downloaders to use", "all"),
+        ("mh_list", "str", "Downloader list (comma separated)", ""),
         ("mh_interval", "int", "Reload interval in hours", 12),
     ]
 
@@ -28,43 +24,40 @@ class LinksnappyCom(MultiAccount):
 
     API_URL = "https://linksnappy.com/api/"
 
-    def api_response(self, method, **kwargs):
+    def api_request(self, method, **kwargs):
         return json.loads(self.load(self.API_URL + method, get=kwargs))
 
     def grab_hosters(self, user, password, data):
-        json_data = self.api_response("FILEHOSTS")
-        return list(json_data["return"].keys())
+        json_data = self.api_request("FILEHOSTS")
+        return [k for k, v in json_data["return"].items() if v["Status"] == "1"]
 
     def grab_info(self, user, password, data):
         premium = True
         validuntil = None
         trafficleft = None
 
-        json_data = self.api_response("USERDETAILS", username=user, password=password)
+        json_data = self.api_request("USERDETAILS", username=user, password=password)
 
         if json_data["status"] != "OK":
             self.log_error(json_data["error"])
 
         else:
-            validuntil = json_data["return"]["expire"]
+            expire = json_data["return"]["expire"]
 
-            if validuntil == "lifetime":
+            if expire == "lifetime":
                 validuntil = -1
 
-            elif validuntil == "expired":
+            elif expire == "expired":
                 premium = False
 
             else:
-                validuntil = float(validuntil)
+                validuntil = float(expire)
 
-            if "trafficleft" not in json_data["return"] or isinstance(
-                json_data["return"]["trafficleft"], str
-            ):
+            if isinstance(json_data["return"].get("trafficleft", ""), str):
                 trafficleft = -1
 
             else:
-                # TODO: Remove `>> 10` in 0.6.x
-                trafficleft = float(json_data["return"]["trafficleft"]) >> 10
+                trafficleft = float(json_data["return"]["trafficleft"]) * 1024
 
         return {
             "premium": premium,
@@ -73,7 +66,7 @@ class LinksnappyCom(MultiAccount):
         }
 
     def signin(self, user, password, data):
-        json_data = self.api_response("AUTHENTICATE", username=user, password=password)
+        json_data = self.api_request("AUTHENTICATE", username=user, password=password)
 
         if json_data["status"] != "OK":
             self.fail_login(json_data["error"])

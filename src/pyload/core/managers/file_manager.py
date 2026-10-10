@@ -1,11 +1,20 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: RaNaN, mkaay
-
+from itertools import chain
 from threading import RLock
 
 from ..datatypes.enums import Destination
-from ..utils.old import lock
-from .event_manager import InsertEvent, ReloadAllEvent, RemoveEvent, UpdateEvent
+from ..utils.struct.lock import lock
+from .event_manager import InsertEvent, RemoveEvent, UpdateEvent
+
+
+def change(func):
+    def new(self, *args):
+        self.unchanged = False
+        self.filecount = -1
+        self.queuecount = -1
+        self.job_cache = {}
+        return func(self, *args)
+
+    return new
 
 
 class FileManager:
@@ -53,16 +62,6 @@ class FileManager:
         self.queuecount = -1  #: number of package to be loaded
         self.unchanged = False  #: determines if any changes was made since last call
 
-    def change(func):
-        def new(*args):
-            args[0].unchanged = False
-            args[0].filecount = -1
-            args[0].queuecount = -1
-            args[0].job_cache = {}
-            return func(*args)
-
-        return new
-
     # ----------------------------------------------------------------------
     def save(self):
         """
@@ -73,7 +72,7 @@ class FileManager:
     # ----------------------------------------------------------------------
     def sync_save(self):
         """
-        saves all data to backend and waits until all data are written.
+        saves all data to backend and waits until all the data is written.
         """
         pyfiles = self.cache.values()
         for pyfile in pyfiles:
@@ -134,8 +133,10 @@ class FileManager:
         self.pyload.db.add_links(data, package)
         self.pyload.thread_manager.create_info_thread(data, package)
 
-        # TODO: change from reload_all event to package update event
-        self.pyload.event_manager.add_event(ReloadAllEvent("collector"))
+        p = self.get_package(package)
+        self.pyload.event_manager.add_event(
+            UpdateEvent("pack", package, "collector" if not p.queue else "queue")
+        )
 
     # ----------------------------------------------------------------------
     @lock
@@ -173,7 +174,7 @@ class FileManager:
 
         e = RemoveEvent("pack", id, "collector" if not p.queue else "queue")
 
-        pyfiles = self.cache.values()
+        pyfiles = list(self.cache.values())
         for pyfile in pyfiles:
             if pyfile.packageid == id:
                 pyfile.abort_download()
@@ -292,7 +293,7 @@ class FileManager:
 
         tmplist = []
 
-        cache = self.cache.values()
+        cache = list(self.cache.values())
         for x in cache:
             if int(x.to_db_dict()[x.id]["package"]) == int(id):
                 tmplist.append((x.id, x.to_db_dict()[x.id]))
@@ -324,42 +325,52 @@ class FileManager:
 
     # ----------------------------------------------------------------------
     @lock
-    def get_job(self, occ):
+    def get_job(self, occupied):
         """
         get suitable job.
         """
         # TODO: clean mess
         # TODO: improve selection of valid jobs
 
-        if occ in self.job_cache:
-            if self.job_cache[occ]:
-                id = self.job_cache[occ].pop()
+        if occupied in self.job_cache:
+            if self.job_cache[occupied]:
+                id = self.job_cache[occupied].pop()
                 if id == "empty":
                     pyfile = None
-                    self.job_cache[occ].append("empty")
+                    self.job_cache[occupied].append("empty")
                 else:
                     pyfile = self.get_file(id)
+                    # Handle case where file was deleted but still in cache
+                    if pyfile is None and self.job_cache[occupied]:
+                        # Try next file in cache
+                        return self.get_job(occupied)
             else:
-                jobs = self.pyload.db.get_job(occ)
+                jobs = self.pyload.db.get_job(occupied)
                 jobs.reverse()
                 if not jobs:
-                    self.job_cache[occ].append("empty")
+                    self.job_cache[occupied].append("empty")
                     pyfile = None
                 else:
-                    self.job_cache[occ].extend(jobs)
-                    pyfile = self.get_file(self.job_cache[occ].pop())
+                    self.job_cache[occupied].extend(jobs)
+                    pyfile = self.get_file(self.job_cache[occupied].pop())
+                    # Handle case where file was deleted
+                    if pyfile is None and self.job_cache[occupied]:
+                        return self.get_job(occupied)
 
         else:
-            self.job_cache = {}  #: better not caching to much
-            jobs = self.pyload.db.get_job(occ)
+            self.job_cache = {}  #: better not caching too much
+            jobs = self.pyload.db.get_job(occupied)
             jobs.reverse()
-            self.job_cache[occ] = jobs
+            self.job_cache[occupied] = jobs
 
             if not jobs:
-                self.job_cache[occ].append("empty")
+                self.job_cache[occupied].append("empty")
                 pyfile = None
             else:
-                pyfile = self.get_file(self.job_cache[occ].pop())
+                pyfile = self.get_file(self.job_cache[occupied].pop())
+                # Handle case where file was deleted
+                if pyfile is None and self.job_cache[occupied]:
+                    return self.get_job(occupied)
 
             # TODO: maybe the new job has to be approved...
 
@@ -371,13 +382,15 @@ class FileManager:
         """
         return job for decrypting.
         """
-        if "decrypt" in self.job_cache:
+        if "decrypt" in self.job_cache and self.job_cache["decrypt"] == "empty":
             return None
 
-        plugins = list(self.pyload.plugin_manager.crypter_plugins.keys()) + list(
-            self.pyload.plugin_manager.container_plugins.keys()
+        plugins = tuple(
+            chain(
+                self.pyload.plugin_manager.decrypter_plugins.keys(),
+                self.pyload.plugin_manager.container_plugins.keys(),
+            )
         )
-        plugins = str(tuple(plugins))
 
         jobs = self.pyload.db.get_plugin_job(plugins)
         if jobs:
@@ -439,7 +452,7 @@ class FileManager:
         """
         restart package.
         """
-        pyfiles = self.cache.values()
+        pyfiles = list(self.cache.values())
         for pyfile in pyfiles:
             if pyfile.packageid == id:
                 self.restart_file(pyfile.id)
@@ -477,58 +490,73 @@ class FileManager:
 
     @lock
     @change
-    def set_package_location(self, id, queue):
+    def set_package_location(self, package_id, queue):
         """
-        push package to queue.
+        move package to queue / collector.
         """
         queue = queue.value
-        p = self.pyload.db.get_package(id)
+        p = self.pyload.db.get_package(package_id)
+        if not p:
+            return
+
+        old_queue = p.queue
         oldorder = p.order
 
-        e = RemoveEvent("pack", id, "collector" if not p.queue else "queue")
+        e = RemoveEvent("pack", package_id, "collector" if not old_queue else "queue")
         self.pyload.event_manager.add_event(e)
 
+        # Clear package order in old queue and adjust other packages
         self.pyload.db.clear_package_order(p)
 
-        p = self.pyload.db.get_package(id)
-
+        # Update package location
+        p = self.pyload.db.get_package(package_id)
         p.queue = queue
         self.pyload.db.update_package(p)
 
+        # Reorder package to end of new queue
         self.pyload.db.reorder_package(p, -1, True)
 
-        packs = self.package_cache.values()
+        # Update cached packages in old queue (database already updated by clear_package_order)
+        packs = list(self.package_cache.values())
         for pack in packs:
-            if pack.queue != queue and pack.order > oldorder:
+            if pack.queue == old_queue and pack.order > oldorder and pack.id != package_id:
                 pack.order -= 1
                 pack.notify_change()
 
         self.pyload.db.commit()
-        self.release_package(id)
-        p = self.get_package(id)
 
-        e = InsertEvent("pack", id, p.order, "collector" if not p.queue else "queue")
+        self.release_package(package_id)
+        p = self.get_package(package_id)
+
+        e = InsertEvent("pack", package_id, p.order, "collector" if not p.queue else "queue")
         self.pyload.event_manager.add_event(e)
 
     @lock
     @change
     def reorder_package(self, id, position):
         p = self.get_package(id)
+        if not p:
+            return
+
+        old_position = p.order
+        if old_position == position:
+            return
 
         e = RemoveEvent("pack", id, "collector" if not p.queue else "queue")
         self.pyload.event_manager.add_event(e)
         self.pyload.db.reorder_package(p, position)
 
-        packs = self.package_cache.values()
+        packs = list(self.package_cache.values())
         for pack in packs:
-            if pack.queue != p.queue or pack.order < 0 or pack == p:
+            if pack.queue != p.queue or pack.order < 0 or pack.id == id:
                 continue
-            if p.order > position:
-                if pack.order >= position and pack.order < p.order:
+
+            if old_position > position:
+                if position <= pack.order < old_position:
                     pack.order += 1
                     pack.notify_change()
-            elif p.order < position:
-                if pack.order <= position and pack.order > p.order:
+            elif old_position < position:
+                if old_position < pack.order <= position:
                     pack.order -= 1
                     pack.notify_change()
 
@@ -542,27 +570,35 @@ class FileManager:
     @change
     def reorder_file(self, id, position):
         f = self.get_file_data(id)
+        if not f:
+            return
         f = f[id]
+
+        p = self.get_package(f["package"])
+        if not p:
+            return
+
+        old_position = f["order"]
 
         e = RemoveEvent(
             "file",
             id,
-            "collector" if not self.get_package(f["package"]).queue else "queue",
+            "collector" if not p.queue else "queue",
         )
         self.pyload.event_manager.add_event(e)
 
         self.pyload.db.reorder_link(f, position)
 
-        pyfiles = self.cache.values()
+        pyfiles = list(self.cache.values())
         for pyfile in pyfiles:
-            if pyfile.packageid != f["package"] or pyfile.order < 0:
+            if pyfile.packageid != f["package"] or pyfile.order < 0 or pyfile.id == id:
                 continue
-            if f["order"] > position:
-                if pyfile.order >= position and pyfile.order < f["order"]:
+            if old_position > position:
+                if pyfile.order >= position and pyfile.order < old_position:
                     pyfile.order += 1
                     pyfile.notify_change()
-            elif f["order"] < position:
-                if pyfile.order <= position and pyfile.order > f["order"]:
+            elif old_position < position:
+                if pyfile.order <= position and pyfile.order > old_position:
                     pyfile.order -= 1
                     pyfile.notify_change()
 
@@ -575,7 +611,7 @@ class FileManager:
             "file",
             id,
             position,
-            "collector" if not self.get_package(f["package"]).queue else "queue",
+            "collector" if not p.queue else "queue",
         )
         self.pyload.event_manager.add_event(e)
 
@@ -603,7 +639,7 @@ class FileManager:
                 self.pyload.addon_manager.package_finished(pyfile.package())
                 pyfile.package().set_finished = True
 
-    def re_check_package(self, pid):
+    def recheck_package(self, pid):
         """
         recheck links in package.
         """
@@ -623,8 +659,8 @@ class FileManager:
         """
         deletes finished links and packages, return deleted packages.
         """
-        old_packs = self.get_info_data(0)
-        old_packs.update(self.get_info_data(1))
+        old_packs = self.get_info_data(Destination.QUEUE)
+        old_packs.update(self.get_info_data(Destination.COLLECTOR))
 
         self.pyload.db.delete_finished()
 

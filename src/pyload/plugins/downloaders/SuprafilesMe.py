@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-
-
 from ..base.xfs_downloader import XFSDownloader
 
 
@@ -9,8 +6,6 @@ class SuprafilesMe(XFSDownloader):
     __type__ = "downloader"
     __version__ = "0.01"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?(?:suprafiles\.me|sfiles\.org)/(?P<ID>\w+)"
     __config__ = [

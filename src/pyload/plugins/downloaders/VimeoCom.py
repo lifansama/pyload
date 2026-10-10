@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import json
 import re
 import urllib.parse
@@ -9,10 +8,8 @@ from ..base.simple_downloader import SimpleDownloader
 class VimeoCom(SimpleDownloader):
     __name__ = "VimeoCom"
     __type__ = "downloader"
-    __version__ = "0.12"
+    __version__ = "0.14"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?(player\.)?vimeo\.com/(video/)?(?P<ID>\d+)"
     __config__ = [
@@ -39,9 +36,8 @@ class VimeoCom(SimpleDownloader):
 
     COOKIES = [("vimeo.com", "language", "en")]
 
-    @classmethod
-    def get_info(cls, url="", html=""):
-        info = super(VimeoCom, cls).get_info(url, html)
+    def get_info(self, url="", html=""):
+        info = super(VimeoCom, self).get_info(url, html)
         # Unfortunately, NAME_PATTERN does not include file extension so we blindly add '.mp4' as an extension.
         # (hopefully all links are '.mp4' files)
         if "name" in info:
@@ -100,7 +96,7 @@ class VimeoCom(SimpleDownloader):
 
         for q in qlevel:
             if q in videos.keys():
-                self.download(videos[q], fixurl=False)
+                self.download(videos[q])
                 return
 
             else:

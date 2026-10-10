@@ -1,12 +1,9 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: RaNaN, mkaay
-
 import time
 from threading import RLock
 
 from ..managers.event_manager import UpdateEvent
-from ..utils import format
-from ..utils.old import lock
+from ..utils import format, purge
+from ..utils.struct.lock import lock
 
 status_map = {
     "finished": 0,
@@ -27,8 +24,12 @@ status_map = {
 }
 
 
-def set_size(self, value):
+def _set_size(self, value):
     self._size = int(value)
+
+
+def _set_name(self, value):
+    self._name = purge.name(value, sep="")
 
 
 class PyFile:
@@ -44,6 +45,7 @@ class PyFile:
 
         self.id = int(id)
         self.url = url
+        self._name = None
         self.name = name
 
         self._size = None
@@ -61,7 +63,7 @@ class PyFile:
         self.plugin = None
         # self.download = None
 
-        self.wait_until = 0  #: time.time() + time to wait
+        self.wait_until = 0  #: time.monotonic() + time to wait
 
         # status attributes
         self.active = False  #: obsolete?
@@ -74,7 +76,10 @@ class PyFile:
         self.maxprogress = 100
 
     # will convert all sizes to ints
-    size = property(lambda self: self._size, set_size)
+    size = property(lambda self: self._size, _set_size)
+
+    # ensure safe name assignment
+    name = property(lambda self: self._name, _set_name)
 
     def __repr__(self):
         return f"PyFile {self.id}: {self.name}@{self.pluginname}"
@@ -109,7 +114,7 @@ class PyFile:
 
     def set_status(self, status):
         self.status = status_map[status]
-        self.sync()  # TODO: needed aslong no better job approving exists
+        self.sync()  # TODO: needed as long no better job approving exists
 
     def set_custom_status(self, msg, status="processing"):
         self.statusname = msg
@@ -139,7 +144,7 @@ class PyFile:
         if self.packageid > 0:
             self.sync()
 
-        if hasattr(self, "plugin") and self.plugin:
+        if self.has_plugin():
             self.plugin.clean()
             del self.plugin
 
@@ -216,16 +221,10 @@ class PyFile:
 
     def format_wait(self):
         """
-        formats and return wait time in humanreadable format.
+        formats and return wait time in human readable format.
         """
-        seconds = self.wait_until - time.time()
-
-        if seconds < 0:
-            return "00:00:00"
-
-        hours, seconds = divmod(seconds, 3600)
-        minutes, seconds = divmod(seconds, 60)
-        return f"{hours:02}:{minutes:02}:{seconds:02}"
+        seconds = int(self.wait_until - time.monotonic())
+        return format.time(seconds, literally=False)
 
     def format_size(self):
         """
@@ -238,13 +237,7 @@ class PyFile:
         formats eta to readable format.
         """
         seconds = self.get_eta()
-
-        if seconds < 0:
-            return "00:00:00"
-
-        hours, seconds = divmod(seconds, 3600)
-        minutes, seconds = divmod(seconds, 60)
-        return "{:02}:{:02}:{:02}".format(hours, minutes, seconds)
+        return format.time(seconds, literally=False)
 
     def get_speed(self):
         """
@@ -260,8 +253,8 @@ class PyFile:
         gets established time of arrival.
         """
         try:
-            return self.get_bytes_left() // self.get_speed()
-        except Exception:
+            return int(self.get_bytes_left() // self.get_speed())
+        except ZeroDivisionError:
             return 0
 
     def get_bytes_left(self):
@@ -269,7 +262,7 @@ class PyFile:
         gets bytes left.
         """
         try:
-            return self.plugin.req.size - self.plugin.req.arrived
+            return max(self.get_size() - self.plugin.req.arrived, 0)
         except Exception:
             return 0
 
@@ -304,6 +297,11 @@ class PyFile:
         self.m.pyload.event_manager.add_event(e)
 
     def set_progress(self, value):
-        if not value == self.progress:
+        if value != self.progress:
             self.progress = value
+            self.notify_change()
+
+    def set_name(self, value):
+        if value != self.name:
+            self.name = value
             self.notify_change()

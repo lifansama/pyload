@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import datetime
 import hashlib
 import json
@@ -14,11 +12,9 @@ class TwojlimitPl(MultiAccount):
     __version__ = "0.01"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
     __config__ = [
-        ("mh_mode", "all;listed;unlisted", "Filter hosters to use", "all"),
-        ("mh_list", "str", "Hoster list (comma separated)", ""),
+        ("mh_mode", "all;listed;unlisted", "Filter downloaders to use", "all"),
+        ("mh_list", "str", "Downloader list (comma separated)", ""),
         ("mh_interval", "int", "Reload interval in hours", 12),
     ]
 

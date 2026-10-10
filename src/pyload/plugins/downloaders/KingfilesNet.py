@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import re
 
 from ..anticaptchas.SolveMedia import SolveMedia
@@ -10,8 +9,6 @@ class KingfilesNet(SimpleDownloader):
     __type__ = "downloader"
     __version__ = "0.13"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://(?:www\.)?kingfiles\.net/(?P<ID>\w{12})"
     __config__ = [

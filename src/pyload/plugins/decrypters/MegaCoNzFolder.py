@@ -1,19 +1,16 @@
-# -*- coding: utf-8 -*-
-
+from pyload.core.network.http.http_request import HTTPRequest
 
 from ..base.decrypter import BaseDecrypter
-from ..downloaders.MegaCoNz import MegaClient, MegaCrypto
+from ..downloaders.MegaCoNz import MegaClient
 
 
 class MegaCoNzFolder(BaseDecrypter):
     __name__ = "MegaCoNzFolder"
     __type__ = "decrypter"
-    __version__ = "0.21"
+    __version__ = "0.28"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
-    __pattern__ = r"(https?://(?:www\.)?mega(\.co)?\.nz/|mega:|chrome:.+?)#F!(?P<ID>[\w^_]+)!(?P<KEY>[\w,\-=]+)"
+    __pattern__ = r"https?://(?:www\.)?mega(?:\.co)?\.nz/folder/(?P<ID>[\w^_]+)#(?P<KEY>[\w,\-=]+)(?:/folder/(?P<SUBDIR>[\w]+))?/?$"
     __config__ = [
         ("enabled", "bool", "Activated", True),
         ("use_premium", "bool", "Use premium account if available", True),
@@ -32,35 +29,42 @@ class MegaCoNzFolder(BaseDecrypter):
         ("GammaC0de", "nitzo2001[AT]yahoo[DOT]com"),
     ]
 
+    def setup(self):
+        try:
+            self.req.http.close()
+        except Exception:
+            pass
+
+        self.req.http = HTTPRequest(
+            cookies=self.req.cj,
+            options=self.pyload.request_factory.get_options(),
+            limit=10_000_000,
+        )
+
     def decrypt(self, pyfile):
         id = self.info["pattern"]["ID"]
         master_key = self.info["pattern"]["KEY"]
+        subdir = self.info["pattern"]["SUBDIR"]
 
         self.log_debug(
             "ID: {}".format(id), "Key: {}".format(master_key), "Type: public folder"
         )
 
-        master_key = MegaCrypto.base64_to_a32(master_key)
-
         mega = MegaClient(self, id)
 
         #: F is for requesting folder listing (kind like a `ls` command)
-        res = mega.api_response(a="f", c=1, r=1, ca=1, ssl=1)
-
+        res = mega.api_request(a="f", c=1, r=1, ca=1, ssl=1)
         if isinstance(res, int):
             mega.check_error(res)
         elif "e" in res:
             mega.check_error(res["e"])
 
-        def get_node_key(k):
-            return MegaCrypto.base64_encode(
-                MegaCrypto.a32_to_str(MegaCrypto.decrypt_key(k, master_key))
-            )
-
-        self.links = [
-            self._("https://mega.co.nz/#N!{}!{}###n={}").format(
-                f["h"], get_node_key(f["k"][f["k"].index(":") + 1 :]), id
-            )
-            for f in res["f"]
-            if f["t"] == 0 and ":" in f["k"]
+        urls = [
+            "https://mega.co.nz/folder/{}#{}/file/{}".format(id, master_key, node["h"])
+            for node in res["f"]
+            if node["t"] == 0 and ":" in node["k"]
+            if subdir is None or node["p"] == subdir
         ]
+
+        if urls:
+            self.packages = [(pyfile.package().folder, urls, pyfile.package().name)]

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 
 from ..base.simple_decrypter import SimpleDecrypter
@@ -8,10 +6,8 @@ from ..base.simple_decrypter import SimpleDecrypter
 class Dereferer(SimpleDecrypter):
     __name__ = "Dereferer"
     __type__ = "decrypter"
-    __version__ = "0.26"
+    __version__ = "0.27"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?(?:\w+\.)*?(?P<DOMAIN>(?:[\d.]+|[\w\-]{3,63}(?:\.[a-zA-Z]{2,}){1,2})(?:\:\d+)?)/.*?(?P<LINK>[\w^_]+://.+)"
     __config__ = [
@@ -40,7 +36,7 @@ class Dereferer(SimpleDecrypter):
         return super()._log(level, plugintype, pluginname, args, kwargs)
 
     def init(self):
-        self.__pattern__ = self.pyload.plugin_manager.crypter_plugins[self.classname][
+        self.__pattern__ = self.pyload.plugin_manager.decrypter_plugins[self.classname][
             "pattern"
         ]  # TODO: Recheck in 0.6.x
 

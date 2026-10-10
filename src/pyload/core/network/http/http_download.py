@@ -1,15 +1,12 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: RaNaN
-
 import os
-import shutil
 import time
+import urllib.parse
 from logging import getLogger
 
 import pycurl
 from pyload import APPID
 
-from ..exceptions import Abort
+from ..exceptions import Abort, Fail
 from .http_chunk import ChunkInfo, HTTPChunk
 from .http_request import BadHeader
 
@@ -23,28 +20,31 @@ class HTTPDownload:
         self,
         url,
         filename,
-        get={},
-        post={},
+        size=0,
+        get=None,
+        post=None,
         referer=None,
         cj=None,
         bucket=None,
-        options={},
-        progress_notify=None,
+        options=None,
+        status_notify=None,
         disposition=False,
     ):
         self.url = url
         self.filename = filename  #: complete file destination, not only name
-        self.get = get
-        self.post = post
+        self.get = get or {}
+        self.post = post or {}
         self.referer = referer
         self.cj = cj  #: cookiejar if cookies are needed
         self.bucket = bucket
-        self.options = options
+        self.options = options or {}
         self.disposition = disposition
-        # all arguments
+        #: all arguments
+
+        self.code = 0  #: last http code, would be set from the first chunk
 
         self.abort = False
-        self.size = 0
+        self.size = size
         self.name_disposition = None  #: will be parsed from content disposition
 
         self.chunks = []
@@ -62,17 +62,17 @@ class HTTPDownload:
         self.chunk_support = None
         self.m = self.manager = pycurl.CurlMulti()
 
-        # needed for speed calculation
+        #: needed for speed calculation
         self.last_arrived = []
-        self.speeds = []
-        self.last_speeds = [0, 0]
+        self.last_speeds = []
 
-        self.progress_notify = progress_notify
+        #: notifications callback
+        self.status_notify = status_notify
 
     @property
     def speed(self):
-        last = [sum(x) for x in self.last_speeds if x]
-        return (sum(self.speeds) + sum(last)) // (1 + len(last))
+        #: bytes per second
+        return int(sum(self.last_speeds) // len(self.last_speeds))  #: average
 
     @property
     def arrived(self):
@@ -85,19 +85,19 @@ class HTTPDownload:
         return (self.arrived * 100) // self.size
 
     def _copy_chunks(self):
-        init = self.info.get_chunk_name(0)  #: initial chunk name
+        init = self.info.get_chunk_filename(0)  #: initial chunk name
 
         if self.info.get_count() > 1:
-            with open(init, mode="rb+") as fo:  #: first chunkfile
+            with open(init, mode="rb+") as fo:  #: first chunk file
                 for i in range(1, self.info.get_count()):
-                    # input file
-                    # seek to beginning of chunk, to get rid of overlapping chunks
+                    #: input file
+                    #: seek to beginning of chunk, to get rid of overlapping chunks
                     fo.seek(self.info.get_chunk_range(i - 1)[1] + 1)
                     fname = f"{self.filename}.chunk{i}"
                     with open(fname, mode="rb") as fi:
-                        buf = 32 << 10
+                        buffer_size = 32 << 10
                         while True:  #: copy in chunks, consumes less memory
-                            data = fi.read(buf)
+                            data = fi.read(buffer_size)
                             if not data:
                                 break
                             fo.write(data)
@@ -115,7 +115,11 @@ class HTTPDownload:
                 os.path.dirname(self.filename), self.name_disposition
             )
 
-        shutil.move(init, self.filename)
+        try:
+            os.remove(self.filename)
+        except FileNotFoundError:
+            pass
+        os.rename(init, self.filename)
         self.info.remove()  #: os.remove info file
 
     def download(self, chunks=1, resume=False):
@@ -128,25 +132,32 @@ class HTTPDownload:
         try:
             self._download(chunks, resume)
         except pycurl.error as exc:
-            # code 33 - no resume
+            #: code 33 - no resume
             code = exc.args[0]
-            if code == 33:
-                # try again without resume
+            if code == pycurl.E_HTTP_RANGE_ERROR:
+                #: try again without resume
                 self.log.debug("Errno 33 -> Restart without resume")
 
-                # os.remove old handles
+                #: os.remove old handles
                 for chunk in self.chunks:
                     self.close_chunk(chunk)
 
                 return self._download(chunks, False)
+            elif code == pycurl.E_ABORTED_BY_CALLBACK:
+                hostname = urllib.parse.urlparse(self.url).hostname
+                bad_ip = next((chunk.request.bad_ip for chunk in self.chunks if chunk.request.bad_ip), None)
+                raise Fail(f"Refusing to download from Server-Side host ('{hostname}' resolves to {bad_ip})")
+
             else:
                 raise
+
         finally:
             self.close()
 
         if self.name_disposition and self.disposition:
             return self.name_disposition
-        return None
+        else:
+            return None
 
     def _download(self, chunks, resume):
         if not resume:
@@ -157,7 +168,7 @@ class HTTPDownload:
 
         self.chunks = []
 
-        # initial chunk that will load complete file (if needed)
+        #: initial chunk that will load complete file (if needed)
         init = HTTPChunk(0, self, None, resume)
 
         self.chunks.append(init)
@@ -174,10 +185,10 @@ class HTTPDownload:
             self.chunk_support = True
 
         while True:
-            # need to create chunks
+            #: do we need to create chunks?
             if (
                 not chunks_created and self.chunk_support and self.size
-            ):  #: will be setted later by first chunk
+            ):  #: will be set later by first chunk
 
                 if not resume:
                     self.info.set_size(self.size)
@@ -196,7 +207,7 @@ class HTTPDownload:
                         self.chunks.append(c)
                         self.m.add_handle(handle)
                     else:
-                        # close immediatly
+                        #: close immediately
                         self.log.debug("Invalid curl handle -> closed")
                         c.close()
 
@@ -207,61 +218,66 @@ class HTTPDownload:
                 if ret != pycurl.E_CALL_MULTI_PERFORM:
                     break
 
-            t = time.time()
+            t = time.monotonic()
 
-            # reduce these calls
+            #: reduce these calls
             while last_finish_check + 0.5 < t:
-                # list of failed curl handles
+                #: list of failed curl handles
                 failed = []
                 ex = None  #: save only last exception, we can only raise one anyway
 
-                num_q, ok_list, err_list = self.m.info_read()
+                num_queued, ok_list, err_list = self.m.info_read()
                 for c in ok_list:
                     chunk = self.find_chunk(c)
                     try:  #: check if the header implies success, else add it to failed list
-                        chunk.verify_header()
+                        chunk.code = chunk.verify_header()
                     except BadHeader as exc:
                         self.log.debug(f"Chunk {chunk.id + 1} failed: {exc}")
+                        chunk.code = exc.code
                         failed.append(chunk)
                         ex = exc
                     else:
+                        self.log.debug(f"Chunk {chunk.id + 1} download finished")
                         chunks_done.add(c)
 
-                for c in err_list:
-                    curl, errno, msg = c
-                    chunk = self.find_chunk(curl)
-                    # test if chunk was finished
-                    if errno != 23 or "0 !=" not in msg:
+                for c, errno, msg in err_list:
+                    chunk = self.find_chunk(c)
+                    #: test if chunk was finished
+                    if errno != pycurl.E_WRITE_ERROR or not chunk.aborted:
                         failed.append(chunk)
                         ex = pycurl.error(errno, msg)
-                        self.log.debug(f"Chunk {chunk.id + 1} failed: {ex}")
+                        if errno != pycurl.E_ABORTED_BY_CALLBACK:
+                            self.log.debug(f"Chunk {chunk.id + 1} failed: {ex}")
                         continue
 
                     try:  #: check if the header implies success, else add it to failed list
-                        chunk.verify_header()
+                        chunk.code = chunk.verify_header()
                     except BadHeader as exc:
                         self.log.debug(f"Chunk {chunk.id + 1} failed: {exc}")
+                        chunk.code = exc.code
                         failed.append(chunk)
                         ex = exc
                     else:
-                        chunks_done.add(curl)
-                if not num_q:  #: no more infos to get
+                        self.log.debug(f"Chunk {chunk.id + 1} download finished")
+                        chunks_done.add(c)
 
-                    # check if init is not finished so we reset download connections
-                    # note that other chunks are closed and downloaded with init too
+                if num_queued == 0:  #: no more infos to get
+
+                    #: check if init is not finished, so we reset download connections
+                    #: note that other chunks are closed and downloaded with init too
                     if failed and init not in failed and init.c not in chunks_done:
                         self.log.error(
                             f"Download chunks failed, fallback to single connection | {ex}"
                         )
 
-                        # list of chunks to clean and os.remove
+                        #: list of chunks to clean and os.remove
                         to_clean = [x for x in self.chunks if x is not init]
                         for chunk in to_clean:
                             self.close_chunk(chunk)
                             self.chunks.remove(chunk)
-                            os.remove(self.info.get_chunk_name(chunk.id))
+                            os.remove(self.info.get_chunk_filename(chunk.id))
 
-                        # let first chunk load the rest and update the info file
+                        #: let first chunk load the rest and update the info file
                         init.reset_range()
                         self.info.clear()
                         self.info.add_chunk(f"{self.filename}.chunk0", (0, self.size))
@@ -283,17 +299,16 @@ class HTTPDownload:
             if done:
                 break  #: all chunks loaded
 
-            # calc speed once per second, averaging over 3 seconds
+            #: calc speed once per second, averaging over 3 seconds
             if last_time_check + 1 < t:
-                diff = [
-                    c.arrived
-                    - (self.last_arrived[i] if len(self.last_arrived) > i else 0)
-                    for i, c in enumerate(self.chunks)
-                ]
+                arrived_delta = (
+                    chunk.arrived - (self.last_arrived[i] if len(self.last_arrived) > i else 0)
+                    for i, chunk in enumerate(self.chunks)
+                )
+                self.last_speeds = [
+                    sum(float(delta) / (t - last_time_check) for delta in arrived_delta)
+                ] + self.last_speeds[:2]
 
-                self.last_speeds[1] = self.last_speeds[0]
-                self.last_speeds[0] = self.speeds
-                self.speeds = [float(a) / (t - last_time_check) for a in diff]
                 self.last_arrived = [c.arrived for c in self.chunks]
                 last_time_check = t
                 self.update_progress()
@@ -301,8 +316,7 @@ class HTTPDownload:
             if self.abort:
                 raise Abort
 
-            # time.sleep(0.003) #supress busy waiting - limits dl speed to  (1 / x) *
-            # buffersize
+            # time.sleep(0.003)  #: suppress busy waiting - limits dl speed to  (1 / x) * buffersize
             self.m.select(1)
 
         for chunk in self.chunks:
@@ -310,9 +324,20 @@ class HTTPDownload:
 
         self._copy_chunks()
 
+        self.code = init.code
+        self.size = self.arrived  #: set size to actual downloaded size
+
     def update_progress(self):
-        if self.progress_notify:
-            self.progress_notify(self.percent)
+        if self.status_notify:
+            self.status_notify({"progress": self.percent})
+
+    def update_disposition(self, disposition):
+        self.name_disposition = disposition
+        if self.disposition:
+            if self.status_notify:
+                self.status_notify({"disposition": disposition})
+        else:
+            self.log.debug("Ignoring Content-Disposition header")
 
     def find_chunk(self, handle):
         """
@@ -321,6 +346,8 @@ class HTTPDownload:
         for chunk in self.chunks:
             if chunk.c == handle:
                 return chunk
+
+        return None
 
     def close_chunk(self, chunk):
         try:

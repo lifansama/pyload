@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import json
 import time
 from datetime import timedelta
@@ -12,11 +11,9 @@ class MyfastfileCom(MultiAccount):
     __version__ = "0.12"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
     __config__ = [
-        ("mh_mode", "all;listed;unlisted", "Filter hosters to use", "all"),
-        ("mh_list", "str", "Hoster list (comma separated)", ""),
+        ("mh_mode", "all;listed;unlisted", "Filter downloaders to use", "all"),
+        ("mh_list", "str", "Downloader list (comma separated)", ""),
         ("mh_interval", "int", "Reload interval in hours", 12),
     ]
 
@@ -34,7 +31,7 @@ class MyfastfileCom(MultiAccount):
     def grab_info(self, user, password, data):
         if "days_left" in self.json_data:
             validuntil = (
-                time.time() + timedelta(hours=self.json_data["days_left"] * 24).seconds
+                time.time() + timedelta(hours=self.json_data["days_left"] * 24).total_seconds()
             )
             return {"premium": True, "validuntil": validuntil, "trafficleft": -1}
         else:

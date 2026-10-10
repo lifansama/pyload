@@ -1,10 +1,7 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: RaNaN
-
 import time
 from threading import Lock
 
-from ..utils.old import lock
+from ..utils.struct.lock import lock
 
 
 class Bucket:
@@ -14,7 +11,7 @@ class Bucket:
     def __init__(self):
         self._rate = 0
         self.token = 0
-        self.timestamp = time.time()
+        self.timestamp = time.monotonic()
         self.lock = Lock()
 
     def __bool__(self):
@@ -32,7 +29,7 @@ class Bucket:
     def _calc_token(self):
         if self.token >= self._rate:
             return
-        now = time.time()
+        now = time.monotonic()
         delta = self._rate * (now - self.timestamp)
         self.token = min(self._rate, self.token + delta)
         self.timestamp = now

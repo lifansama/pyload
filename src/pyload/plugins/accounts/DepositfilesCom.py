@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 import time
 
@@ -11,8 +9,6 @@ class DepositfilesCom(BaseAccount):
     __type__ = "account"
     __version__ = "0.39"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __description__ = """Depositfiles.com account plugin"""
     __license__ = "GPLv3"

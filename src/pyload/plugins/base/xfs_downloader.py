@@ -1,26 +1,23 @@
-# -*- coding: utf-8 -*-
-
-import operator
-import random
 import re
 from datetime import timedelta
+from urllib.parse import urljoin
 
-from pyload.core.utils import parse, seconds
-from pyload.core.utils.old import html_unescape
+from pyload.core.utils import parse
+from pyload.core.utils.web.purge import unescape as html_unescape
 
+from ..anticaptchas.HCaptcha import HCaptcha
 from ..anticaptchas.ReCaptcha import ReCaptcha
 from ..anticaptchas.SolveMedia import SolveMedia
-from ..helpers import set_cookie
+from ..anticaptchas.Turnstile import Turnstile
+from ..helpers import search_pattern
 from .simple_downloader import SimpleDownloader
 
 
 class XFSDownloader(SimpleDownloader):
     __name__ = "XFSDownloader"
     __type__ = "downloader"
-    __version__ = "0.81"
+    __version__ = "0.92"
     __status__ = "stable"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"^unmatchable$"
     __config__ = [
@@ -37,13 +34,13 @@ class XFSDownloader(SimpleDownloader):
         ("zoidberg", "zoidberg@mujmail.cz"),
         ("stickell", "l.stickell@yahoo.it"),
         ("Walter Purcaro", "vuolter@gmail.com"),
+        ("GammaC0de", "nitzo2001[AT]yahoo[DOT]com"),
     ]
 
     PLUGIN_DOMAIN = None
+    PLUGIN_URL = None
 
     DIRECT_LINK = None
-    # NOTE: hould be set to `False` by default for safe, but I am lazy...
-    LEECH_HOSTER = True
 
     NAME_PATTERN = r'(Filename[ ]*:[ ]*</b>(</td><td nowrap>)?|name="fname"[ ]+value="|<[\w^_]+ class="(file)?name">)\s*(?P<N>.+?)(\s*<|")'
     SIZE_PATTERN = r'(Size[ ]*:[ ]*</b>(</td><td>)?|File:.*>|</font>\s*\(|<[\w^_]+ class="size">)\s*(?P<S>[\d.,]+)\s*(?P<U>[\w^_]+)'
@@ -65,6 +62,8 @@ class XFSDownloader(SimpleDownloader):
     CAPTCHA_PATTERN = r'(https?://[^"\']+?/captchas?/[^"\']+)'
     CAPTCHA_BLOCK_PATTERN = r">Enter code.*?<div.*?>(.+?)</div>"
     RECAPTCHA_PATTERN = None
+    HCAPTCHA_PATTERN = None
+    TURNSTILE_PATTERN = None
     SOLVEMEDIA_PATTERN = None
 
     FORM_PATTERN = None
@@ -80,7 +79,7 @@ class XFSDownloader(SimpleDownloader):
         if isinstance(self.COOKIES, list) and cookie not in self.COOKIES:
             self.COOKIES.insert(cookie)
         else:
-            set_cookie(self.req.cj, *cookie)
+            self.req.cj.set_cookie(*cookie)
 
     def _prepare(self):
         if not self.PLUGIN_DOMAIN:
@@ -93,7 +92,7 @@ class XFSDownloader(SimpleDownloader):
             domain = self.PLUGIN_DOMAIN.replace(".", r"\.")
             self.LINK_PATTERN = rf'(?:file: "(.+?)"|(https?://(?:www\.)?([^/]*?{domain}|\d+\.\d+\.\d+\.\d+)(\:\d+)?(/d/|(/files)?/\d+/\w+/).+?)["\'<])'
 
-        SimpleDownloader._prepare(self)
+        super(XFSDownloader, self)._prepare()
 
         if self.DIRECT_LINK is None:
             self.direct_dl = self.premium
@@ -104,20 +103,23 @@ class XFSDownloader(SimpleDownloader):
 
             self.check_errors()
 
-            m = re.search(self.LINK_PATTERN, self.data, re.S)
+            m = search_pattern(self.LINK_PATTERN, self.data, flags=re.S)
             if m is not None:
                 self.link = m.group(1)
                 break
 
             self.data = self.load(
-                pyfile.url, post=self._post_parameters(), redirect=False
+                self.PLUGIN_URL or pyfile.url,
+                post=self._post_parameters(),
+                referrer=self.PLUGIN_URL or pyfile.url,
+                redirect=False
             )
 
             if "op=" not in self.last_header.get("location", "op="):
                 self.link = self.last_header.get("location")
                 break
 
-            m = re.search(self.LINK_PATTERN, self.data, re.S)
+            m = search_pattern(self.LINK_PATTERN, self.data, flags=re.S)
             if m is not None:
                 self.link = m.group(1)
                 break
@@ -126,63 +128,6 @@ class XFSDownloader(SimpleDownloader):
 
     def handle_premium(self, pyfile):
         return self.handle_free(pyfile)
-
-    def handle_multi(self, pyfile):
-        if not self.account:
-            self.fail(
-                self._("Only registered or premium users can use url leech feature")
-            )
-
-        #: Only tested with easybytez.com
-        self.data = self.load("http://www.{}/".format(self.PLUGIN_DOMAIN))
-
-        action, inputs = self.parse_html_form()
-
-        upload_id = "{:012}".format(int(random.random() * 10 ** 12))
-        action += upload_id + "&js_on=1&utype=prem&upload_type=url"
-
-        inputs["tos"] = "1"
-        inputs["url_mass"] = pyfile.url
-        inputs["up1oad_type"] = "url"
-
-        self.log_debug(action, inputs)
-
-        #: Wait for file to upload to easybytez.com
-        self.req.set_option("timeout", 600)
-
-        self.data = self.load(action, post=inputs)
-
-        self.check_errors()
-
-        action, inputs = self.parse_html_form("F1")
-        if not inputs:
-            self.retry(msg=self.info.get("error") or self._("TEXTAREA F1 not found"))
-
-        self.log_debug(inputs)
-
-        stmsg = inputs["st"]
-
-        if stmsg == "OK":
-            self.data = self.load(action, post=inputs)
-
-        elif "Can not leech file" in stmsg:
-            self.retry(20, timedelta(minutes=3).seconds, self._("Can not leech file"))
-
-        elif "today" in stmsg:
-            self.retry(
-                wait=seconds.to_midnight(),
-                msg=self._("You've used all Leech traffic today"),
-            )
-
-        else:
-            self.fail(stmsg)
-
-        #: Get easybytez.com link for uploaded file
-        m = re.search(self.LINK_LEECH_PATTERN, self.data)
-        if m is None:
-            self.error(self._("LINK_LEECH_PATTERN not found"))
-
-        self.link = self.load(m.group(1), just_header=True).get("location")
 
     def _post_parameters(self):
         if self.FORM_PATTERN or self.FORM_INPUTS_MAP:
@@ -212,7 +157,7 @@ class XFSDownloader(SimpleDownloader):
                     self.fail(self._("Missing password"))
 
             if not self.premium:
-                m = re.search(self.WAIT_PATTERN, self.data)
+                m = search_pattern(self.WAIT_PATTERN, self.data)
                 if m is not None:
                     try:
                         waitmsg = m.group(1).strip()
@@ -224,7 +169,7 @@ class XFSDownloader(SimpleDownloader):
                     self.set_wait(wait_time)
                     if (
                         wait_time
-                        < timedelta(minutes=self.config.get("max_wait", 10)).seconds
+                        < timedelta(minutes=self.config.get("max_wait", 10)).total_seconds()
                         or not self.pyload.config.get("reconnect", "enabled")
                         or not self.pyload.api.is_time_reconnect()
                     ):
@@ -236,10 +181,10 @@ class XFSDownloader(SimpleDownloader):
                     self.handle_captcha(inputs)
 
                 if "referer" in inputs and len(inputs["referer"]) == 0:
-                    inputs["referer"] = self.pyfile.url
+                    inputs["referer"] = self.PLUGIN_URL or self.pyfile.url
 
         else:
-            inputs["referer"] = self.pyfile.url
+            inputs["referer"] = self.PLUGIN_URL or self.pyfile.url
 
         if self.premium:
             inputs["method_premium"] = "Premium Download"
@@ -251,13 +196,13 @@ class XFSDownloader(SimpleDownloader):
         return inputs
 
     def handle_captcha(self, inputs):
-        m = re.search(self.CAPTCHA_PATTERN, self.data)
+        m = search_pattern(self.CAPTCHA_PATTERN, self.data)
         if m is not None:
-            captcha_url = m.group(1)
+            captcha_url = urljoin(self.pyfile.url, m.group(1))
             inputs["code"] = self.captcha.decrypt(captcha_url)
             return
 
-        m = re.search(self.CAPTCHA_BLOCK_PATTERN, self.data, re.S)
+        m = search_pattern(self.CAPTCHA_BLOCK_PATTERN, self.data, flags=re.S)
         if m is not None:
             captcha_div = m.group(1)
             numerals = re.findall(
@@ -268,7 +213,7 @@ class XFSDownloader(SimpleDownloader):
             self.log_debug(captcha_div)
 
             code = inputs["code"] = "".join(
-                a[1] for a in sorted(numerals, key=operator.itemgetter(0))
+                a[1] for a in sorted(numerals, key=lambda i: int(i[0]))
             )
 
             self.log_debug(f"Captcha code: {code}", numerals)
@@ -276,9 +221,9 @@ class XFSDownloader(SimpleDownloader):
 
         recaptcha = ReCaptcha(self.pyfile)
         try:
-            captcha_key = re.search(self.RECAPTCHA_PATTERN, self.data).group(1)
+            captcha_key = search_pattern(self.RECAPTCHA_PATTERN, self.data).group(1)
 
-        except Exception:
+        except (AttributeError, IndexError):
             captcha_key = recaptcha.detect_key()
 
         else:
@@ -286,14 +231,29 @@ class XFSDownloader(SimpleDownloader):
 
         if captcha_key:
             self.captcha = recaptcha
-            inputs["g-recaptcha-response"], challenge = recaptcha.challenge(captcha_key)
+            inputs["g-recaptcha-response"] = recaptcha.challenge(captcha_key)
+            return
+
+        hcaptcha = HCaptcha(self.pyfile)
+        try:
+            captcha_key = search_pattern(self.HCAPTCHA_PATTERN, self.data).group(1)
+
+        except (AttributeError, IndexError):
+            captcha_key = hcaptcha.detect_key()
+
+        else:
+            self.log_debug(f"HCaptcha key: {captcha_key}")
+
+        if captcha_key:
+            self.captcha = hcaptcha
+            inputs["g-recaptcha-response"] = inputs["h-captcha-response"] = hcaptcha.challenge(captcha_key)
             return
 
         solvemedia = SolveMedia(self.pyfile)
         try:
-            captcha_key = re.search(self.SOLVEMEDIA_PATTERN, self.data).group(1)
+            captcha_key = search_pattern(self.SOLVEMEDIA_PATTERN, self.data).group(1)
 
-        except Exception:
+        except (AttributeError, IndexError):
             captcha_key = solvemedia.detect_key()
 
         else:
@@ -301,6 +261,23 @@ class XFSDownloader(SimpleDownloader):
 
         if captcha_key:
             self.captcha = solvemedia
-            inputs["adcopy_response"], inputs[
-                "adcopy_challenge"
-            ] = solvemedia.challenge(captcha_key)
+            (
+                inputs["adcopy_response"],
+                inputs["adcopy_challenge"],
+            ) = solvemedia.challenge(captcha_key)
+            return
+
+        turnstile = Turnstile(self.pyfile)
+        try:
+            captcha_key = search_pattern(self.TURNSTILE_PATTERN, self.data).group(1)
+
+        except (AttributeError, IndexError):
+            captcha_key = turnstile.detect_key()
+
+        else:
+            self.log_debug(f"Turnstile key: {captcha_key}")
+
+        if captcha_key:
+            self.captcha = turnstile
+            inputs["cf-turnstile-response"] = turnstile.challenge(captcha_key)
+            return

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import re
 
 from ..base.decrypter import BaseDecrypter
@@ -10,11 +9,9 @@ class CzshareComFolder(BaseDecrypter):
     __version__ = "0.27"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
-    __pattern__ = r"http://(?:www\.)?(czshare|sdilej)\.(com|cz)/folders/.+"
+    __pattern__ = r"https?://(?:www\.)?(czshare|sdilej)\.(com|cz)/folders/.+"
     __config__ = [
-        ("enabled", "bool", "Activated", True),
+        ("activated", "bool", "Activated", True),
         ("use_premium", "bool", "Use premium account if available", True),
         (
             "folder_per_package",

@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: RaNaN, vuolter
-
 import time
 from datetime import timedelta
 
@@ -74,7 +71,7 @@ class InfoThread(PluginThread):
 
             self.pyload.log.debug(f"Fetched and generated {len(packs)} packages")
 
-            for k, v in packs:
+            for k, v in packs.items():
                 self.pyload.api.add_package(k, v)
 
             # empty cache
@@ -121,7 +118,7 @@ class InfoThread(PluginThread):
 
             self.m.info_results[self.rid]["ALL_INFO_FETCHED"] = {}
 
-        self.m.timestamp = time.time() + timedelta(minutes=5).seconds
+        self.m.timestamp = time.monotonic() + timedelta(minutes=5).total_seconds()
 
     def update_db(self, plugin, result):
         self.pyload.files.update_file_info(result, self.pid)
@@ -135,7 +132,12 @@ class InfoThread(PluginThread):
         if len(self.cache) >= 20 or force:
             # used for package generating
             tmp = [
-                (name, (url, OnlineStatus(name, plugin, "unknown", status, int(size))))
+                (name, (url, OnlineStatus(name=name,
+                                          plugin=plugin,
+                                          packagename="unknown",
+                                          status=status,
+                                          size=int(size)
+                                          )))
                 for name, size, status, url in self.cache
             ]
 

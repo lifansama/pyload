@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 #
 # Based on 4chandl by Roland Beermann (https://gist.github.com/enkore/3492599)
 
@@ -15,8 +13,6 @@ class FourChanOrg(BaseDecrypter):
     __type__ = "decrypter"
     __version__ = "0.38"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://(?:www\.)?boards\.4chan\.org/\w+/res/(\d+)"
     __config__ = [

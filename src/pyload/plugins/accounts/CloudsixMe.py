@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from ..base.xfs_account import XFSAccount
 
 
@@ -8,8 +6,6 @@ class CloudsixMe(XFSAccount):
     __type__ = "account"
     __version__ = "0.05"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __description__ = """Cloudsix.me account plugin"""
     __license__ = "GPLv3"

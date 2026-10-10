@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: vuolter
-
 import locale
 import logging
 import logging.handlers
@@ -147,22 +144,18 @@ class LogFactory:
 
     def _init_filelog_handler(self, logger):
         filename = logger.name + self.FILE_EXTENSION
-        dirname = None
 
-        folder = self.pyload.config.get("log", "filelog_folder")
-        if folder:
-            dirname = folder
-        else:
-            dirname = os.path.join(self.pyload.userdir, "logs")
+        filelog_folder = self.pyload.config.get("log", "filelog_folder")
+        if not filelog_folder:
+            filelog_folder = os.path.join(self.pyload.userdir, "logs")
 
-        os.makedirs(dirname, exist_ok=True)
+        os.makedirs(filelog_folder, exist_ok=True)
 
         filelog_form = logging.Formatter(
             self.LINEFORMAT, self.DATEFORMAT, self.LINESTYLE
         )
-        filelog_path = os.path.join(dirname, filename)
+        filelog_path = os.path.join(filelog_folder, filename)
 
-        encoding = locale.getpreferredencoding(do_setlocale=False)
         if self.pyload.config.get("log", "filelog_rotate"):
             max_size = self.pyload.config.get("log", "filelog_size") << 10
             max_entries = self.pyload.config.get("log", "filelog_entries")
@@ -171,11 +164,11 @@ class LogFactory:
                 filelog_path,
                 maxBytes=max_size,
                 backupCount=max_entries,
-                encoding=encoding,
+                encoding="utf-8",
             )
 
         else:
-            filehdlr = logging.FileHandler(filelog_path, encoding=encoding)
+            filehdlr = logging.FileHandler(filelog_path, encoding="utf-8")
 
         filehdlr.setFormatter(filelog_form)
         logger.addHandler(filehdlr)

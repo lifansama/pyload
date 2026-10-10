@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import random
 
 from ..base.multi_downloader import MultiDownloader
@@ -25,8 +23,6 @@ class MegaRapidoNet(MultiDownloader):
     __type__ = "downloader"
     __version__ = "0.12"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://(?:www\.)?\w+\.megarapido\.net/\?file=\w+"
     __config__ = [

@@ -1,11 +1,7 @@
-# -*- coding: utf-8 -*-
-
 import base64
 import json
 import re
 import urllib.parse
-
-from pyload.core.network.request_factory import get_url
 
 from ..base.simple_downloader import SimpleDownloader
 
@@ -23,10 +19,8 @@ def xor_decrypt(data, key):
 class MegadyskPl(SimpleDownloader):
     __name__ = "MegadyskPl"
     __type__ = "downloader"
-    __version__ = "0.04"
+    __version__ = "0.05"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?megadysk\.pl/dl/.+"
     __config__ = [
@@ -46,9 +40,8 @@ class MegadyskPl(SimpleDownloader):
 
     OFFLINE_PATTERN = r"(?:Nothing has been found|have been deleted)<"
 
-    @classmethod
-    def api_info(cls, url):
-        html = get_url(url)
+    def api_info(self, url):
+        html = self.load(url)
         info = {}
 
         m = re.search(r"window\['.*?'\]\s*=\s*\"(.*?)\"", html)
@@ -59,7 +52,7 @@ class MegadyskPl(SimpleDownloader):
 
         encrypted_info = m.group(1)
 
-        html = get_url("https://megadysk.pl/dist/index.js")
+        html = self.load("https://megadysk.pl/dist/index.js")
 
         m = re.search(r't.ISK\s*=\s*"(\w+)"', html)
         if m is None:

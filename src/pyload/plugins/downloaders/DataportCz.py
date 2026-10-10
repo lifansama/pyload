@@ -1,5 +1,4 @@
-# -*- coding: utf-8 -*-
-
+from pyload.core.utils.convert import to_bytes
 
 from ..base.simple_downloader import SimpleDownloader
 
@@ -9,8 +8,6 @@ class DataportCz(SimpleDownloader):
     __type__ = "downloader"
     __version__ = "0.47"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://(?:www\.)?dataport\.cz/file/(.+)"
     __config__ = [
@@ -51,8 +48,8 @@ class DataportCz(SimpleDownloader):
 
         check = self.scan_download(
             {
-                "captcha": 'alert("\\u0160patn\\u011b opsan\\u00fd k\\u00f3d z obr\\u00e1zu");',
-                "slot": 'alert("Je n\\u00e1m l\\u00edto, ale moment\\u00e1ln\\u011b nejsou',
+                "captcha": to_bytes('alert("\\u0160patn\\u011b opsan\\u00fd k\\u00f3d z obr\\u00e1zu");'),
+                "slot": to_bytes('alert("Je n\\u00e1m l\\u00edto, ale moment\\u00e1ln\\u011b nejsou'),
             }
         )
         if check == "captcha":

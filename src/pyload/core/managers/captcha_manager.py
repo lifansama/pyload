@@ -1,10 +1,7 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: mkaay, RaNaN
-
 import time
 from threading import Lock
 
-from ..utils.old import lock
+from ..utils.struct.lock import lock
 
 
 class CaptchaManager:
@@ -16,8 +13,9 @@ class CaptchaManager:
 
         self.ids = 0  #: Only for internal purpose
 
-    def new_task(self, format, params, result_type):
-        task = CaptchaTask(self.ids, format, params, result_type)
+    @lock
+    def new_task(self, captcha_format, params, result_type):
+        task = CaptchaTask(self.ids, captcha_format, params, result_type)
         self.ids += 1
         return task
 
@@ -50,9 +48,13 @@ class CaptchaManager:
 
         for plugin in self.pyload.addon_manager.active_plugins():
             try:
-                plugin.new_captcha_task(task)
+                plugin.captcha_task(task)
             except Exception:
-                pass
+                self.pyload.log.warning(
+                    self.pyload._("Unable to create captcha task"),
+                    exc_info=self.pyload.debug > 1,
+                    stack_info=self.pyload.debug > 2
+                )
 
         if task.handler or cli:  #: The captcha was handled
             self.tasks.append(task)
@@ -64,14 +66,14 @@ class CaptchaManager:
 
 
 class CaptchaTask:
-    def __init__(self, id, format, params={}, result_type="textual"):
+    def __init__(self, id, captcha_format, captcha_params=None, result_type="textual"):
         self.id = str(id)
-        self.captcha_params = params
-        self.captcha_format = format
+        self.captcha_params = captcha_params or {}
+        self.captcha_format = captcha_format
         self.captcha_result_type = result_type
         self.handler = []  #: the addon plugins that will take care of the solution
         self.result = None
-        self.wait_until = None
+        self.wait_until = 0
         self.error = None  #: error message
 
         self.status = "init"
@@ -81,7 +83,7 @@ class CaptchaTask:
         return self.captcha_params, self.captcha_format, self.captcha_result_type
 
     def set_result(self, result):
-        if self.is_textual() or self.is_interactive():
+        if self.is_textual() or self.is_interactive() or self.is_invisible():
             self.result = result
 
         elif self.is_positional():
@@ -101,11 +103,11 @@ class CaptchaTask:
         """
         let the captcha wait secs for the solution.
         """
-        self.wait_until = max(time.time() + sec, self.wait_until)
+        self.wait_until = max(time.monotonic() + sec, self.wait_until)
         self.status = "waiting"
 
     def is_waiting(self):
-        if self.result or self.error or time.time() > self.wait_until:
+        if self.result or self.error or time.monotonic() > self.wait_until:
             return False
 
         return True
@@ -128,14 +130,20 @@ class CaptchaTask:
         """
         return self.captcha_result_type == "interactive"
 
-    def set_wating_for_user(self, exclusive):
+    def is_invisible(self):
+        """
+        returns if invisible (browser only, no user interaction) captcha.
+        """
+        return self.captcha_result_type == "invisible"
+
+    def set_waiting_for_user(self, exclusive):
         if exclusive:
             self.status = "user"
         else:
             self.status = "shared-user"
 
     def timed_out(self):
-        return time.time() > self.wait_until
+        return time.monotonic() > self.wait_until
 
     def invalid(self):
         """

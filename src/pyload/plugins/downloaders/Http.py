@@ -1,5 +1,4 @@
-# -*- coding: utf-8 -*-
-
+import fnmatch
 import re
 import urllib.parse
 
@@ -11,60 +10,76 @@ from ..base.downloader import BaseDownloader
 class Http(BaseDownloader):
     __name__ = "Http"
     __type__ = "downloader"
-    __version__ = "0.10"
+    __version__ = "0.15"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"(?:jd|pys?)://.+"
     __config__ = [("enabled", "bool", "Activated", True)]
 
     __description__ = """Download simple http link"""
     __license__ = "GPLv3"
-    __authors__ = [("Walter Purcaro", "vuolter@gmail.com")]
+    __authors__ = [
+        ("Walter Purcaro", "vuolter@gmail.com"),
+        ("GammaC0de", "nitzo2001[AT]yahoo[DOT]com"),
+    ]
 
     def setup(self):
         self.chunk_limit = -1
         self.resume_download = True
 
+    def load_account(self):
+        class_name = self.classname
+        self.__class__.__name__ = "Http"
+        super().load_account()
+        self.__class__.__name__ = class_name
+
     def process(self, pyfile):
         url = re.sub(r"^(jd|py)", "http", pyfile.url)
+
         netloc = urllib.parse.urlparse(url).netloc
+        try:
+            auth, netloc = netloc.split('@', 2)
+        except ValueError:
+            auth = None
 
-        for _ in range(2):
-            try:
-                self.download(url, ref=False, disposition=True)
+        if auth is None:
+            password = self.get_password()
+            if ":" in password:
+                auth = password
+                self.log_debug(f"Logging on to {netloc} using credentials specified in the package password")
 
-            except BadHeader as exc:
-                if exc.code not in (401, 403, 404, 410):
-                    raise
-
-            if self.req.code in (404, 410):
-                self.offline()
-
-            elif self.req.code in (401, 403):
-                self.log_debug(
-                    "Auth required", f"Received HTTP status code: {self.req.code}"
-                )
-
-                # TODO: Recheck in 0.6.x
-                if self.account:
-                    servers = [x["login"] for x in self.account.get_all_accounts()]
-                else:
-                    servers = []
-
-                if netloc in servers:
-                    self.log_debug(f"Logging on to {netloc}")
-                    self.req.add_auth(self.account.get_login("password"))
-
-                else:
-                    pwd = self.get_password()
-                    if ":" in pwd:
-                        self.req.add_auth(pwd)
-                    else:
-                        self.fail(self._("Authorization required"))
             else:
-                break
+                if self.account:
+                    logins = dict((x['login'], x['password'])
+                                  for x in self.account.get_all_accounts())
+                else:
+                    logins = {}
+
+                for pattern, auth in logins.items():
+                    if fnmatch.fnmatch(netloc, pattern):
+                        self.log_debug(f"Logging on to {netloc} using the account plugin")
+                        break
+                else:
+                    auth = None
+
+            if auth is not None:
+                self.req.add_auth(auth)
+
+        else:
+            self.log_debug(f"Logging on to {netloc} using credentials specified in the URL")
+
+        try:
+            self.download(url, referrer=False, disposition=True)
+
+        except BadHeader as exc:
+            if exc.code == 401:
+                self.fail(self._("Unauthorized"))
+
+            else:
+                raise
+
+        if self.req.code in (404, 410):
+            self.offline()
 
         self.check_download()
 
@@ -72,11 +87,11 @@ class Http(BaseDownloader):
         errmsg = self.scan_download(
             {
                 "Html error": re.compile(
-                    r"\A(?:\s*<.+>)?((?:[\w\s]*(?:[Ee]rror|ERROR)\s*\:?)?\s*\d{3})(?:\Z|\s+)"
+                    rb"\A(?:\s*<.+>)?((?:[\w\s]*(?:[Ee]rror|ERROR)\s*\:?)?\s*\d{3})(?:\Z|\s+)"
                 ),
-                "Html file": re.compile(r"\A\s*<!DOCTYPE html"),
+                "Html file": re.compile(rb"\A\s*<!DOCTYPE html"),
                 "Request error": re.compile(
-                    r"([Aa]n error occured while processing your request)"
+                    rb"([Aa]n error occured while processing your request)"
                 ),
             }
         )

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 import urllib.parse
 
@@ -21,8 +19,6 @@ class UpleaCom(SimpleDownloader):
     __type__ = "downloader"
     __version__ = "0.21"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?uplea\.com/dl/\w{15}"
     __config__ = [

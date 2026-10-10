@@ -1,7 +1,4 @@
-# -*- coding: utf-8 -*-
 import re
-
-from pyload.core.network.request_factory import get_url
 
 from ..base.simple_downloader import SimpleDownloader
 
@@ -9,12 +6,10 @@ from ..base.simple_downloader import SimpleDownloader
 class WebshareCz(SimpleDownloader):
     __name__ = "WebshareCz"
     __type__ = "downloader"
-    __version__ = "0.25"
+    __version__ = "0.27"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
-    __pattern__ = r"https?://(?:www\.)?(en\.)?webshare\.cz/(?:#/)?(file/)?(?P<ID>\w+)"
+    __pattern__ = r"https?://(?:www\.)?(?:en\.)?webshare\.cz/(?:#/)?(?:file/)(?P<ID>\w+)"
     __config__ = [
         ("enabled", "bool", "Activated", True),
         ("use_premium", "bool", "Use premium account if available", True),
@@ -23,7 +18,7 @@ class WebshareCz(SimpleDownloader):
         ("max_wait", "int", "Reconnect if waiting time is greater than minutes", 10),
     ]
 
-    __description__ = """WebShare.cz downloader plugin"""
+    __description__ = """Webshare.cz downloader plugin"""
     __license__ = "GPLv3"
     __authors__ = [
         ("stickell", "l.stickell@yahoo.it"),
@@ -34,15 +29,13 @@ class WebshareCz(SimpleDownloader):
 
     API_URL = "https://webshare.cz/api/"
 
-    @classmethod
-    def api_response(cls, method, **kwargs):
-        return get_url(cls.API_URL + method + "/", post=kwargs)
+    def api_request(self, method, **kwargs):
+        return self.load(self.API_URL + method + "/", post=kwargs)
 
-    @classmethod
-    def api_info(cls, url):
+    def api_info(self, url):
         info = {}
-        api_data = cls.api_response(
-            "file_info", ident=re.match(cls.__pattern__, url).group("ID"), wst=""
+        api_data = self.api_request(
+            "file_info", ident=re.match(self.__pattern__, url).group("ID"), wst=""
         )
 
         if re.search(r"<status>OK", api_data):
@@ -65,9 +58,9 @@ class WebshareCz(SimpleDownloader):
         self.chunk_limit = 2
 
     def handle_free(self, pyfile):
-        wst = self.account.get_data("wst") if self.account else None
+        wst = self.account.get_data("wst") if self.account else ""
 
-        api_data = self.api_response(
+        api_data = self.api_request(
             "file_link", ident=self.info["pattern"]["ID"], wst=wst
         )
 

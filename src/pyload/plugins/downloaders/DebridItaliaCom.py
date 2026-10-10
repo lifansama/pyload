@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 
 from ..base.multi_downloader import MultiDownloader
@@ -8,10 +6,8 @@ from ..base.multi_downloader import MultiDownloader
 class DebridItaliaCom(MultiDownloader):
     __name__ = "DebridItaliaCom"
     __type__ = "downloader"
-    __version__ = "0.25"
+    __version__ = "0.26"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.|s\d+\.)?debriditalia\.com/dl/\d+"
     __config__ = [
@@ -33,16 +29,16 @@ class DebridItaliaCom(MultiDownloader):
 
     API_URL = "https://debriditalia.com/api.php"
 
-    def api_response(self, method, **kwargs):
+    def api_request(self, method, **kwargs):
         kwargs[method] = ""
         return self.load(self.API_URL, get=kwargs)
 
     def handle_premium(self, pyfile):
-        self.data = self.api_response(
+        self.data = self.api_request(
             "generate",
-            link=pyfile.url,
+            link=pyfile.url.replace("https://", "http://"),
             u=self.account.user,
-            p=self.account.info["login"]["password"],
+            p=self.account.get_login("password"),
         )
 
         m = re.search(r"ERROR:(.*)", self.data)

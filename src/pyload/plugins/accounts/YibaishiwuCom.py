@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 
 from ..base.account import BaseAccount
@@ -10,8 +8,6 @@ class YibaishiwuCom(BaseAccount):
     __type__ = "account"
     __version__ = "0.09"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __description__ = """115.com account plugin"""
     __license__ = "GPLv3"

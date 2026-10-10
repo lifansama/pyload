@@ -1,10 +1,8 @@
-# -*- coding: utf-8 -*-
-
 import base64
 import os
 import re
 
-import requests
+from pyload.core.network.http.http_request import FormFile
 
 from ..base.container import BaseContainer
 
@@ -12,10 +10,8 @@ from ..base.container import BaseContainer
 class CCF(BaseContainer):
     __name__ = "CCF"
     __type__ = "container"
-    __version__ = "0.29"
+    __version__ = "0.30"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r".+\.ccf$"
     __config__ = [
@@ -34,17 +30,21 @@ class CCF(BaseContainer):
     __authors__ = [
         ("Willnix", "Willnix@pyload.net"),
         ("Walter Purcaro", "vuolter@gmail.com"),
+        ("GammaC0de", "nitzo2001[AT]yahoo[DOT]com"),
     ]
 
     def decrypt(self, pyfile):
         fs_filename = os.fsdecode(pyfile.url)
 
-        with open(fs_filename, mode="rb") as fp:
-            dlc_content = requests.post(
-                "http://service.jdownloader.net/dlcrypt/getDLC.php",
-                data={"src": "ccf", "filename": "test.ccf"},
-                files={"upload": file},
-            ).read()
+        dlc_content = self.load(
+            "http://service.jdownloader.net/dlcrypt/getDLC.php",
+            post={
+                "src": "ccf",
+                "filename": "test.ccf",
+                "upload": FormFile(fs_filename),
+            },
+            multipart=True,
+        )
 
         dl_folder = self.pyload.config.get("general", "storage_folder")
         dlc_file = os.path.join(dl_folder, "tmp_{}.dlc".format(pyfile.name))
@@ -57,7 +57,7 @@ class CCF(BaseContainer):
         except AttributeError:
             self.fail(self._("Container is corrupted"))
 
-        with open(dlc_file, mode="w") as tempdlc:
-            tempdlc.write(dlc)
+        with open(dlc_file, mode="wb") as fp:
+            fp.write(dlc)
 
         self.links = [dlc_file]

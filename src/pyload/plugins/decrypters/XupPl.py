@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-
-
 from ..base.decrypter import BaseDecrypter
 
 
@@ -9,8 +6,6 @@ class XupPl(BaseDecrypter):
     __type__ = "decrypter"
     __version__ = "0.16"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:[^/]*\.)?xup\.pl/.+"
     __config__ = [

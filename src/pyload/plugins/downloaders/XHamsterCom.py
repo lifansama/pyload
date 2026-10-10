@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import json
 import re
 
@@ -26,8 +25,6 @@ class XHamsterCom(BaseDownloader):
     __type__ = "downloader"
     __version__ = "0.19"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:\w+\.)?xhamster\.com/videos/.+"
     __config__ = [

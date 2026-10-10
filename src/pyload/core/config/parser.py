@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import os
 import re
 import shutil
@@ -35,6 +33,7 @@ class ConfigParser:
     _CONFLINE = re.compile(
         r'\s*(?P<T>.+?)\s+(?P<N>[^ ]+?)\s*:\s*"(?P<D>.+?)"\s*=\s?(?P<V>.*)'
     )
+    _SECTLINE = re.compile(r'(.+?)\s+-\s+"(.+?)":')
     _VERSION = re.compile(r"\s*version\s*:\s*(\d+)")
 
     def __init__(self, userdir):
@@ -48,8 +47,8 @@ class ConfigParser:
         configdir = os.path.join(userdir, "settings")
         os.makedirs(configdir, exist_ok=True)
 
-        self.configpath = os.path.join(configdir, "pyload.conf")
-        self.pluginpath = os.path.join(configdir, "plugins.conf")
+        self.configpath = os.path.join(configdir, "pyload.cfg")
+        self.pluginpath = os.path.join(configdir, "plugins.cfg")
 
         self.plugin_cb = None  #: callback when plugin config value is changed
 
@@ -65,34 +64,34 @@ class ConfigParser:
             if not os.path.exists(self.configpath):
                 os.makedirs(os.path.dirname(self.configpath), exist_ok=True)
                 shutil.copy(
-                    os.path.join(PKGDIR, "core", "config", "default.conf"),
+                    os.path.join(PKGDIR, "core", "config", "default.cfg"),
                     self.configpath,
                 )
                 os.chmod(self.configpath, 0o600)
 
             if not os.path.exists(self.pluginpath):
                 os.makedirs(os.path.dirname(self.pluginpath), exist_ok=True)
-                with open(self.pluginpath, mode="w") as fp:
+                with open(self.pluginpath, mode="w", encoding="utf-8") as fp:
                     fp.write(f"version: {__version__}")
                 os.chmod(self.pluginpath, 0o600)
 
-            with open(self.configpath) as fp:
+            with open(self.configpath, encoding="utf-8") as fp:
                 content = fp.read()
 
             m_ver = self._VERSION.search(content)
             if m_ver is None or int(m_ver.group(1)) < __version__:
                 shutil.copy(
-                    os.path.join(PKGDIR, "core", "config", "default.conf"),
+                    os.path.join(PKGDIR, "core", "config", "default.cfg"),
                     self.configpath,
                 )
                 print("Old version of config was replaced")
 
-            with open(self.pluginpath) as fp:
+            with open(self.pluginpath, encoding="utf-8") as fp:
                 content = fp.read()
 
             m_ver = self._VERSION.search(content)
             if m_ver is None or int(m_ver.group(1)) < __version__:
-                with open(self.pluginpath, mode="w") as fp:
+                with open(self.pluginpath, mode="w", encoding="utf-8") as fp:
                     fp.write(f"version: {__version__}")
 
                 print("Old version of plugin-config replaced")
@@ -109,7 +108,7 @@ class ConfigParser:
         reads the config file.
         """
         self.config = self.parse_config(
-            os.path.join(PKGDIR, "core", "config", "default.conf")
+            os.path.join(PKGDIR, "core", "config", "default.cfg")
         )
         self.plugin = self.parse_config(self.pluginpath)
 
@@ -120,11 +119,11 @@ class ConfigParser:
         except Exception as exc:
             exc_logger.exception(exc)
 
-    def parse_config(self, config):
+    def parse_config(self, config_file):
         """
         parses a given configfile.
         """
-        with open(config) as fp:
+        with open(config_file, encoding="utf-8") as fp:
 
             config = fp.read()
 
@@ -154,10 +153,9 @@ class ConfigParser:
                 try:
                     if line == "":
                         continue
-                    elif line.endswith(":"):
-                        section, none, desc = line[:-1].partition("-")
-                        section = section.strip()
-                        desc = desc.replace('"', "").strip()
+                    m = self._SECTLINE.match(line)
+                    if m is not None:
+                        section, desc = m.groups()
                         conf[section] = {"desc": desc}
                     else:
                         if listmode:
@@ -236,7 +234,7 @@ class ConfigParser:
         """
         saves config to filename.
         """
-        with open(filename, mode="w") as fp:
+        with open(filename, mode="w", encoding="utf-8") as fp:
             os.chmod(filename, 0o600)
             fp.write(f"version: {__version__} \n")
             for section in sorted(config.keys()):
@@ -279,15 +277,32 @@ class ConfigParser:
             return value.lower() in ("1", "true", "on", "yes", "y")
 
         elif typ == "time":
+            default_value = "0:00"
             value = "" if value is None else str(value)
             if not value:
-                value = "0:00"
-            if ":" not in value:
+                value = default_value
+            elif ":" not in value:
                 value += ":00"
+
+            hours, seconds = value.split(":", 1)
+            if (
+                hours.isnumeric()
+                and seconds.isnumeric()
+                and 0 <= int(hours) <= 23
+                and 0 <= int(seconds) <= 59
+            ):
+                pass
+            else:
+                value = default_value
+
             return value
 
         elif typ in ("file", "folder"):
-            return os.path.realpath("" if value is None else os.fsdecode(value))
+            return (
+                ""
+                if value in (None, "")
+                else os.path.realpath(os.path.expanduser(os.fsdecode(value)))
+            )
 
         else:
             return value
@@ -301,7 +316,7 @@ class ConfigParser:
 
     def __getitem__(self, section):
         """
-        provides dictonary like access: c['section']['option']
+        provides dictionary like access: c['section']['option']
         """
         return Section(self, section)
 

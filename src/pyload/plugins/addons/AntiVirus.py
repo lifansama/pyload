@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
-
 import os
 import shutil
 import subprocess
+
+from pyload.core.utils.convert import to_str
 
 from ..base.addon import BaseAddon, expose, threaded
 from ..helpers import exists
@@ -10,18 +10,15 @@ from ..helpers import exists
 try:
     import send2trash
 except ImportError:
-    send2trash = None
+    pass
 
 
 class AntiVirus(BaseAddon):
     __name__ = "AntiVirus"
     __type__ = "addon"
-    __version__ = "0.21"
+    __version__ = "0.22"
     __status__ = "broken"
 
-    __pyload_version__ = "0.5"
-
-    # TODO: add trash option (use Send2Trash lib)
     __config__ = [
         ("enabled", "bool", "Activated", False),
         (
@@ -75,14 +72,9 @@ class AntiVirus(BaseAddon):
         pyfile.set_progress(0)
 
         try:
-            p = subprocess.Popen(
-                [avfile, avargs, target],
-                bufsize=-1,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
+            p = subprocess.Popen([avfile, avargs, target])
 
-            out, err = (x.strip() for x in p.communicate())
+            out, err = (to_str(x).strip() for x in p.communicate())
 
             if out:
                 self.log_info(target_repr, out)
@@ -114,7 +106,7 @@ class AntiVirus(BaseAddon):
                             try:
                                 send2trash.send2trash(target)
 
-                            except AttributeError:
+                            except NameError:
                                 self.log_warning(
                                     self._(
                                         "Send2Trash lib not found, moving to quarantine instead"

@@ -1,7 +1,7 @@
-# -*- coding: utf-8 -*-
 import json
 import time
 
+import pycurl
 from pyload.core.network.http.exceptions import BadHeader
 
 from ..base.multi_account import MultiAccount
@@ -14,14 +14,12 @@ def args(**kwargs):
 class RealdebridCom(MultiAccount):
     __name__ = "RealdebridCom"
     __type__ = "account"
-    __version__ = "0.58"
+    __version__ = "0.62"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
     __config__ = [
-        ("mh_mode", "all;listed;unlisted", "Filter hosters to use", "all"),
-        ("mh_list", "str", "Hoster list (comma separated)", ""),
+        ("mh_mode", "all;listed;unlisted", "Filter downloaders to use", "all"),
+        ("mh_list", "str", "Downloader list (comma separated)", ""),
         ("mh_interval", "int", "Reload interval in hours", 12),
     ]
 
@@ -32,39 +30,81 @@ class RealdebridCom(MultiAccount):
         ("GammaC0de", "nitzo2001[AT]yahoo[DOT]com"),
     ]
 
-    API_URL = "https://api.real-debrid.com/rest/1.0"
+    # See https://api.real-debrid.com/
+    API_URL = "https://api.real-debrid.com"
 
-    def api_response(self, namespace, get={}, post={}):
-        json_data = self.load(self.API_URL + namespace, get=get, post=post)
+    def api_request(self, api_type, method, get=None, post=None):
+        if api_type == "rest":
+            endpoint = "/rest/1.0"
+        elif api_type == "oauth":
+            endpoint = "/oauth/v2"
+        else:
+            raise ValueError("Illegal API call type")
+
+        self.req.http.c.setopt(pycurl.USERAGENT, "pyLoad/{}".format(self.pyload.version))
+        try:
+            json_data = self.load(self.API_URL + endpoint + method, get=get, post=post)
+
+        except BadHeader as exc:
+            json_data = exc.content
 
         return json.loads(json_data)
 
+    def _refresh_token(self, client_id, client_secret, refresh_token):
+        res = self.api_request("oauth", "/token",
+                                post=args(client_id=client_id,
+                                          client_secret=client_secret,
+                                          code=refresh_token,
+                                          grant_type="http://oauth.net/grant_type/device/1.0"))
+
+        if 'error' in res:
+            self.log_error(self._(
+                ("You have to use GetRealdebridToken.py to authorize pyLoad: "
+                 "https://github.com/pyload/pyload/files/4406037/GetRealdebridToken.zip")
+            ))
+            self.fail_login()
+
+        return res['access_token'], res['expires_in']
+
     def grab_hosters(self, user, password, data):
-        hosters = self.api_response("/hosts/domains")
+        api_data = self.api_request("rest", "/hosts/status", args(auth_token=data['api_token']))
+        hosters = [x[0] for x in api_data.items() if x[1]['supported'] == 1]
         return hosters
 
     def grab_info(self, user, password, data):
-        account = self.api_response("/user", args(auth_token=password))
+        api_data = self.api_request("rest", "/user", args(auth_token=data['api_token']))
 
-        validuntil = time.time() + account["premium"]
+        premium_remain = api_data["premium"]
+        premium = premium_remain > 0
+        validuntil = time.time() + premium_remain if premium else -1
 
-        return {"validuntil": validuntil, "trafficleft": -1, "premium": True}
+        return {"validuntil": validuntil, "trafficleft": -1, "premium": premium}
 
     def signin(self, user, password, data):
-        try:
-            account = self.api_response("/user", args(auth_token=password))
+        user = user.split('/')
+        if len(user) != 2:
+            self.log_error(self._(
+                ("You have to use GetRealdebridToken.py to authorize pyLoad: "
+                 "https://github.com/pyload/pyload/files/4406037/GetRealdebridToken.zip")
+            ))
+            self.fail_login()
 
-        except BadHeader as exc:
-            if exc.code == 401:
-                self.log_error(
-                    self._(
-                        "Password for Real-debrid should be the API token - get it from: https://real-debrid.com/apitoken"
-                    )
-                )
-                self.fail_login()
+        client_id, client_secret = user
 
-            else:
-                raise
+        if 'api_token' not in data:
+            api_token, timeout = self._refresh_token(client_id, client_secret, password)
+            data['api_token'] = api_token
+            self.timeout = timeout - 5 * 60  #: Five minutes less to be on the safe side
 
-        if user != account["username"]:
+        api_token = data['api_token']
+
+        api_data = self.api_request("rest", "/user", args(auth_token=api_token))
+
+        if api_data.get('error_code') == 8:  #: Token expired? try to refresh
+            api_token, timeout = self._refresh_token(client_id, client_secret, password)
+            data['api_token'] = api_token
+            self.timeout = timeout - 5 * 60  #: Five minutes less to be on the safe side
+
+        elif 'error' in api_data:
+            self.log_error(api_data['error'])
             self.fail_login()

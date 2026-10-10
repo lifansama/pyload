@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import json
 from functools import reduce
 
@@ -15,14 +14,12 @@ def args(**kwargs):
 class MegaDebridEu(MultiAccount):
     __name__ = "MegaDebridEu"
     __type__ = "account"
-    __version__ = "0.37"
+    __version__ = "0.38"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
     __config__ = [
-        ("mh_mode", "all;listed;unlisted", "Filter hosters to use", "all"),
-        ("mh_list", "str", "Hoster list (comma separated)", ""),
+        ("mh_mode", "all;listed;unlisted", "Filter downloaders to use", "all"),
+        ("mh_list", "str", "Downloader list (comma separated)", ""),
         ("mh_interval", "int", "Reload interval in hours", 12),
     ]
 
@@ -36,9 +33,10 @@ class MegaDebridEu(MultiAccount):
 
     LOGIN_TIMEOUT = -1
 
+    # See https://www.mega-debrid.eu/index.php?page=api
     API_URL = "https://www.mega-debrid.eu/api.php"
 
-    def api_response(self, action, get={}, post={}):
+    def api_request(self, action, get=None, post=None):
         get["action"] = action
 
         # Better use pyLoad User-Agent so we don't get blocked
@@ -52,8 +50,10 @@ class MegaDebridEu(MultiAccount):
 
     def grab_hosters(self, user, password, data):
         hosters = []
+        cache_info = data.get("cache_info", {})
+        token = cache_info.get(user, {}).get("token")
         try:
-            res = self.api_response("getHostersList")
+            res = self.api_request("getHostersList", args(token=token))
 
         except BadHeader as exc:
             if exc.code == 405:
@@ -108,7 +108,7 @@ class MegaDebridEu(MultiAccount):
             self.skip_login()
 
         try:
-            res = self.api_response("connectUser", args(login=user, password=password))
+            res = self.api_request("connectUser", args(login=user, password=password))
 
         except BadHeader as exc:
             if exc.code == 401:

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import json
 import re
 
@@ -9,14 +8,10 @@ from ..base.simple_downloader import SimpleDownloader
 class FilecloudIo(SimpleDownloader):
     __name__ = "FilecloudIo"
     __type__ = "downloader"
-    __version__ = "0.16"
+    __version__ = "0.17"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
-    __pattern__ = (
-        r"https?://(?:www\.)?(?:filecloud\.io|ifile\.it|mihd\.net)/(?P<ID>\w+)"
-    )
+    __pattern__ = r"https?://(?:www\.)?(?:filecloud\.io|ifile\.it|mihd\.net)/(?P<ID>\w+)"
     __config__ = [
         ("enabled", "bool", "Activated", True),
         ("use_premium", "bool", "Use premium account if available", True),
@@ -62,7 +57,7 @@ class FilecloudIo(SimpleDownloader):
         self.captcha = ReCaptcha(pyfile)
         captcha_key = self.captcha.detect_key()
         if captcha_key:
-            response, challenge = self.captcha.challenge(captcha_key)
+            response = self.captcha.challenge(captcha_key)
             post_data["r"] = response
 
         self.data = self.load(post_url, post=post_data)

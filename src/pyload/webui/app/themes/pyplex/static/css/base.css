@@ -300,6 +300,26 @@ input[type="color"]:focus,
   transition: background-color .3s;
 }
 
+textarea:read-only,
+input[type="text"]:read-only,
+input[type="password"]:read-only,
+input[type="datetime"]:read-only,
+input[type="datetime-local"]:read-only,
+input[type="date"]:read-only,
+input[type="month"]:read-only,
+input[type="time"]:read-only,
+input[type="week"]:read-only,
+input[type="number"]:read-only,
+input[type="email"]:read-only,
+input[type="url"]:read-only,
+input[type="search"]:read-only,
+input[type="tel"]:read-only,
+input[type="color"]:read-only,
+.uneditable-input:read-only {
+  color: #fff;
+  background-color: #555;
+}
+
 select.form-control,
 textarea.form-control {
   height: 100%;
@@ -373,6 +393,7 @@ textarea.form-control:focus {
 }
 
 .modal-body {
+  overflow: auto;
   background-color: #282828;
 }
 
@@ -381,6 +402,7 @@ textarea.form-control:focus {
 }
 
 .modal-header {
+  overflow: auto;
   border-bottom: 1px solid #212121;
 }
 
@@ -455,12 +477,24 @@ fieldset[disabled] .btn {
   pointer-events: auto;
 }
 
-.peek-a-bar {
-  margin: 0;
-  position: fixed;
-  width: 100%;
-  left: 0;
-  right: 0;
+.navbar-nav .divider-vertical {
+  min-height: 32px;
+  margin: 6px 3px 0 3px;
+  border-left: 1px solid #CACACA;
+}
+
+.modal-dialog {
+  margin-top: 10px;
+}
+
+#cap_textual_img:hover, #cap_textual_img:active{
+  filter: brightness(51%) contrast(6400%) grayscale(100%);
+}
+
+.mdtoast {
+  justify-content: center
+}
+
+.mdtoast .mdt-message {
   text-align: center;
-  z-index: 1040;
 }

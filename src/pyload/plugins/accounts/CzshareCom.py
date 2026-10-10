@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 import time
 
@@ -11,8 +9,6 @@ class CzshareCom(BaseAccount):
     __type__ = "account"
     __version__ = "0.28"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __description__ = """Czshare.com account plugin, now Sdilej.cz"""
     __license__ = "GPLv3"
@@ -30,7 +26,7 @@ class CzshareCom(BaseAccount):
         validuntil = None
         trafficleft = None
 
-        html = self.load("http://sdilej.cz/prehled_kreditu/")
+        html = self.load("https://sdilej.cz/prehled_kreditu/")
 
         try:
             m = re.search(self.CREDIT_LEFT_PATTERN, html, re.MULTILINE)
@@ -40,9 +36,7 @@ class CzshareCom(BaseAccount):
             validuntil = time.mktime(time.strptime(v.group(1), "%d.%m.%y %H:%M"))
 
         except Exception as exc:
-            self.log_error(
-                exc, exc_info=self.pyload.debug > 1, stack_info=self.pyload.debug > 2
-            )
+            self.log_error(exc)
 
         else:
             premium = True

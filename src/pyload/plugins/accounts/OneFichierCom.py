@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 import time
 
@@ -11,10 +9,8 @@ from ..base.account import BaseAccount
 class OneFichierCom(BaseAccount):
     __name__ = "OneFichierCom"
     __type__ = "account"
-    __version__ = "0.24"
+    __version__ = "0.26"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __description__ = """1fichier.com account plugin"""
     __license__ = "GPLv3"
@@ -24,7 +20,7 @@ class OneFichierCom(BaseAccount):
         ("GammaC0de", "nitzo2001[AT]yahoo[DOT]com"),
     ]
 
-    VALID_UNTIL_PATTERN = r'valid until <span style="font-weight:bold">(\d+\-\d+\-\d+)<'
+    VALID_UNTIL_PATTERN = r'Your plan, until (\d+\-\d+\-\d+)'
 
     def grab_info(self, user, password, data):
         validuntil = None
@@ -35,18 +31,14 @@ class OneFichierCom(BaseAccount):
 
         m = re.search(self.VALID_UNTIL_PATTERN, html)
         if m is not None:
-            expiredate = m.group(1)
-            self.log_debug("Expire date: " + expiredate)
+            expire_date = m.group(1)
+            self.log_debug("Expire date: " + expire_date)
 
             try:
-                validuntil = time.mktime(time.strptime(expiredate, "%Y-%m-%d"))
+                validuntil = time.mktime(time.strptime(expire_date, "%Y-%m-%d"))
 
             except Exception as exc:
-                self.log_error(
-                    exc,
-                    exc_info=self.pyload.debug > 1,
-                    stack_info=self.pyload.debug > 2,
-                )
+                self.log_error(exc)
 
             else:
                 premium = True
@@ -60,16 +52,20 @@ class OneFichierCom(BaseAccount):
     def signin(self, user, password, data):
         login_url = "https://1fichier.com/login.pl?lg=en"
 
+        html = self.load(login_url)
+        if "/logout.pl" in html:
+            self.skip_login()
+
         try:
             html = self.load(
                 login_url,
-                ref=login_url,
+                referrer=login_url,
                 post={
                     "mail": user,
                     "pass": password,
-                    "It": "on",
+                    "lt": "on",
                     "purge": "off",
-                    "valider": "Send",
+                    "valider": "OK",
                 },
             )
 
@@ -79,6 +75,7 @@ class OneFichierCom(BaseAccount):
                     ">Invalid username or Password",
                     ">Invalid email address",
                     ">Invalid password",
+                    ">Invalid username",
                 )
             ):
                 self.fail_login()

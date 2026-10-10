@@ -1,7 +1,8 @@
-# -*- coding: utf-8 -*-
 import base64
 import os
 import time
+
+from pyload.core.utils.convert import to_str
 
 from .plugin import BasePlugin
 
@@ -9,10 +10,8 @@ from .plugin import BasePlugin
 class BaseCaptcha(BasePlugin):
     __name__ = "BaseCaptcha"
     __type__ = "anticaptcha"
-    __version__ = "0.56"
+    __version__ = "0.62"
     __status__ = "stable"
-
-    __pyload_version__ = "0.5"
 
     __description__ = """Base anti-captcha plugin"""
     __license__ = "GPLv3"
@@ -36,14 +35,14 @@ class BaseCaptcha(BasePlugin):
         """
         Extend to build your custom anti-captcha ocr.
         """
-        raise NotImplementedError
+        pass
 
     def decrypt(
         self,
         url,
         get={},
         post={},
-        ref=False,
+        referrer=False,
         cookies=True,
         req=None,
         input_type="jpg",
@@ -55,7 +54,7 @@ class BaseCaptcha(BasePlugin):
             url,
             get=get,
             post=post,
-            ref=ref,
+            referrer=referrer,
             cookies=cookies,
             decode=False,
             req=req or self.pyfile.plugin.req,
@@ -83,16 +82,14 @@ class BaseCaptcha(BasePlugin):
         result = None
         time_ref = "{:.2f}".format(time.time())[-6:].replace(".", "")
 
-        with open(
-            os.path.join(
-                self.pyload.cachedir,
-                "captcha_image_{}_{}.{}".format(
-                    self.pyfile.plugin.__name__, time_ref, input_type
-                ),
+        img_path = os.path.join(
+            self.pyload.tempdir,
+            "captcha_image_{}_{}.{}".format(
+                self.pyfile.plugin.__name__, time_ref, input_type
             ),
-            "wb",
-        ) as img_f:
-            img_f.write(img)
+        )
+        with open(img_path, "wb") as img_fp:
+            img_fp.write(img)
 
         if ocr:
             self.log_info(self._("Using OCR to decrypt captcha..."))
@@ -101,9 +98,9 @@ class BaseCaptcha(BasePlugin):
                 _OCR = self.pyload.plugin_manager.load_class(
                     "anticaptcha", ocr
                 )  #: Rename `captcha` to `ocr` in 0.6.x
-                result = _OCR(self.pyfile).recognize(img_f.name)
+                result = _OCR(self.pyfile).recognize(img_fp.name)
             else:
-                result = self.recognize(img_f.name)
+                result = self.recognize(img_fp.name)
 
                 if not result:
                     self.log_warning(self._("No OCR result"))
@@ -115,11 +112,12 @@ class BaseCaptcha(BasePlugin):
             try:
                 params = {
                     "src": "data:image/{};base64,{}".format(
-                        input_type, base64.standard_b64encode(img)
+                        input_type, to_str(base64.standard_b64encode(img))
                     ),
-                    "file": img_f.name,
+                    "file": img_fp.name,
                     "captcha_plugin": self.__name__,
                     "plugin": self.pyfile.plugin.__name__,
+                    "url": self.pyfile.url,
                 }
                 self.task = captcha_manager.new_task(input_type, params, output_type)
 
@@ -153,20 +151,71 @@ class BaseCaptcha(BasePlugin):
                     ).format(timeout)
                 )
 
-        if not self.pyload.debug:
-            self.remove(img_f.name, try_trash=False)
+        self.remove(img_fp.name, try_trash=False)
 
         return result
 
-    def decrypt_interactive(self, params={}, timeout=120):
+    def decrypt_interactive(self, params=None, timeout=120):
+        params = params or {}
+
         captcha_manager = self.pyload.captcha_manager
         timeout = max(timeout, 50)
 
         try:
             params.update(
-                {"captcha_plugin": self.__name__, "plugin": self.pyfile.plugin.__name__}
+                {
+                    "captcha_plugin": self.__name__,
+                    "plugin": self.pyfile.plugin.__name__,
+                    "url": self.pyfile.url,
+                }
             )
             self.task = captcha_manager.new_task("interactive", params, "interactive")
+
+            captcha_manager.handle_captcha(self.task, timeout)
+
+            while self.task.is_waiting():
+                self.pyfile.plugin.check_status()
+                time.sleep(1)
+
+        finally:
+            captcha_manager.remove_task(self.task)
+
+        result = self.task.result
+
+        if self.task.error:
+            if not self.task.handler and not self.pyload.is_client_connected():
+                self.log_warning(self._("No Client connected for captcha decrypting"))
+                self.fail(self._("No Client connected for captcha decrypting"))
+            else:
+                self.pyfile.plugin.retry_captcha(msg=self.task.error)
+
+        elif self.task.result:
+            self.log_info(self._("Captcha result: `{}`").format(result))
+
+        else:
+            self.pyfile.plugin.retry_captcha(
+                msg=self._(
+                    "No captcha result obtained in appropriate timing ({}s)"
+                ).format(timeout)
+            )
+
+        return result
+
+    def decrypt_invisible(self, params=None, timeout=120):
+        params = params or {}
+
+        captcha_manager = self.pyload.captcha_manager
+        timeout = max(timeout, 50)
+
+        try:
+            params.update(
+                {
+                    "captcha_plugin": self.__name__,
+                    "plugin": self.pyfile.plugin.__name__,
+                    "url": self.pyfile.url,
+                }
+            )
+            self.task = captcha_manager.new_task("invisible", params, "invisible")
 
             captcha_manager.handle_captcha(self.task, timeout)
 

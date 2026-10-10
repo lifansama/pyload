@@ -1,9 +1,7 @@
-# -*- coding: utf-8 -*-
-
 import re
-from datetime import timedelta
 
 from pyload.core.utils import parse
+from pyload.core.utils.convert import to_bytes
 
 from ..base.simple_downloader import SimpleDownloader
 
@@ -14,11 +12,7 @@ class CzshareCom(SimpleDownloader):
     __version__ = "1.11"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
-    __pattern__ = (
-        r"https?://(?:www\.)?(czshare|sdilej)\.(com|cz)/(\d+/|download\.php\?).+"
-    )
+    __pattern__ = r"https?://(?:www\.)?(czshare|sdilej)\.(com|cz)/(\d+/|download\.php\?).+"
     __config__ = [
         ("enabled", "bool", "Activated", True),
         ("use_premium", "bool", "Use premium account if available", True),
@@ -29,7 +23,10 @@ class CzshareCom(SimpleDownloader):
 
     __description__ = """CZshare.com downloader plugin, now Sdilej.cz"""
     __license__ = "GPLv3"
-    __authors__ = [("zoidberg", "zoidberg@mujmail.cz"), ("ondrej", "git@ondrej.it")]
+    __authors__ = [
+        ("zoidberg", "zoidberg@mujmail.cz"),
+        ("ondrej", "git@ondrej.it"),
+    ]
 
     NAME_PATTERN = r'<div class="tab" id="parameters">\s*<p>\s*Cel. n.zev: <a href=.*?>(?P<N>.+?)</a>'
     SIZE_PATTERN = r'<div class="tab" id="category">(?:\s*<p>[^\n]*</p>)*\s*Velikost:\s*(?P<S>[\d .,]+)(?P<U>[\w^_]+)\s*</div>'
@@ -64,12 +61,12 @@ class CzshareCom(SimpleDownloader):
             credit = parse.bytesize(m.group(1).replace(" ", ""), m.group(2))
             self.log_info(
                 self._("Premium download for {} KiB of Credit").format(
-                    self.pyfile.size >> 10
+                    self.pyfile.size / 1024
                 )
             )
             self.log_info(
                 self._("User {} has {} KiB left").format(
-                    self.account.user, credit >> 10
+                    self.account.user, credit / 1024
                 )
             )
             if credit < self.pyfile.size:
@@ -82,9 +79,7 @@ class CzshareCom(SimpleDownloader):
 
         except Exception as exc:
             #: let's continue and see what happens...
-            self.log_error(
-                exc, exc_info=self.pyload.debug > 1, stack_info=self.pyload.debug > 2
-            )
+            self.log_error(exc)
 
         return False
 
@@ -94,9 +89,7 @@ class CzshareCom(SimpleDownloader):
             inputs = dict(re.findall(self.FORM_INPUT_PATTERN, form))
 
         except Exception as exc:
-            self.log_error(
-                exc, exc_info=self.pyload.debug > 1, stack_info=self.pyload.debug > 2
-            )
+            self.log_error(exc)
             self.restart(premium=False)
 
         #: Download the file, destination is determined by pyLoad
@@ -115,9 +108,7 @@ class CzshareCom(SimpleDownloader):
         #: Get download ticket and parse html
         self.data = self.load(parsed_url)
         if re.search(self.MULTIDL_PATTERN, self.data):
-            self.retry(
-                timedelta(minutes=5).seconds, 12, self._("Download limit reached")
-            )
+            self.retry(5 * 60, 12, self._("Download limit reached"))
 
         try:
             form = re.search(self.FREE_FORM_PATTERN, self.data, re.S).group(1)
@@ -125,9 +116,7 @@ class CzshareCom(SimpleDownloader):
             pyfile.size = int(inputs["size"])
 
         except Exception as exc:
-            self.log_error(
-                exc, exc_info=self.pyload.debug > 1, stack_info=self.pyload.debug > 2
-            )
+            self.log_error(exc)
             self.error(self._("Form"))
 
         #: Get and decrypt captcha
@@ -139,9 +128,7 @@ class CzshareCom(SimpleDownloader):
             self.retry_captcha()
 
         elif re.search(self.MULTIDL_PATTERN, self.data):
-            self.retry(
-                timedelta(minutes=5).seconds, 12, self._("Download limit reached")
-            )
+            self.retry(5 * 60, 12, self._("Download limit reached"))
 
         else:
             self.captcha.correct()
@@ -150,9 +137,9 @@ class CzshareCom(SimpleDownloader):
         self.set_wait(int(m.group(1)) if m else 50)
 
         #: Download the file, destination is determined by pyLoad
-        self.log_debug("WAIT URL", self.req.last_effective_url)
+        self.log_debug("WAIT URL", self.req.lastEffectiveURL)
 
-        m = re.search("free_wait.php\?server=(.*?)&(.*)", self.req.last_effective_url)
+        m = re.search("free_wait.php\?server=(.*?)&(.*)", self.req.lastEffectiveURL)
         if m is None:
             self.error(self._("Download URL not found"))
 
@@ -164,10 +151,10 @@ class CzshareCom(SimpleDownloader):
         #: Check download
         check = self.scan_download(
             {
-                "temp offline": re.compile(r"^Soubor je do.*asn.* nedostupn.*$"),
-                "credit": re.compile(r"^Nem.*te dostate.*n.* kredit.$"),
-                "multi-dl": re.compile(self.MULTIDL_PATTERN),
-                "captcha": "<li>Zadaný ověřovací kód nesouhlasí!</li>",
+                "temp offline": re.compile(rb"^Soubor je do.*asn.* nedostupn.*$"),
+                "credit": re.compile(rb"^Nem.*te dostate.*n.* kredit.$"),
+                "multi-dl": re.compile(to_bytes(self.MULTIDL_PATTERN)),
+                "captcha": to_bytes("<li>Zadaný ověřovací kód nesouhlasí!</li>"),
             }
         )
 
@@ -178,11 +165,9 @@ class CzshareCom(SimpleDownloader):
             self.restart(premium=False)
 
         elif check == "multi-dl":
-            self.retry(
-                timedelta(minutes=5).seconds, 12, self._("Download limit reached")
-            )
+            self.retry(5 * 60, 12, self._("Download limit reached"))
 
         elif check == "captcha":
             self.retry_captcha()
 
-        return SimpleDownloader.check_download(self)
+        return super().check_download()

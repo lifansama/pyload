@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import json
 
 from ..base.multi_downloader import MultiDownloader
@@ -7,10 +6,8 @@ from ..base.multi_downloader import MultiDownloader
 class RapideoPl(MultiDownloader):
     __name__ = "RapideoPl"
     __type__ = "downloader"
-    __version__ = "0.13"
+    __version__ = "0.14"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"^unmatchable$"
     __config__ = [
@@ -108,8 +105,7 @@ class RapideoPl(MultiDownloader):
         pyfile.size = parsed["filesize"]
 
         try:
-            link = self.run_file_query(pyfile.url, "filedownload")
-            self.download(link, fixurl=False)
+            self.link = self.run_file_query(pyfile.url, "filedownload")
 
         except Exception:
             self.temp_offline("Query error #2")

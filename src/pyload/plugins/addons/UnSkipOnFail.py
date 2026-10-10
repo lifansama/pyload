@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-
-
 from pyload.core.datatypes.pyfile import PyFile
 
 from ..base.addon import BaseAddon
@@ -11,8 +8,6 @@ class UnSkipOnFail(BaseAddon):
     __type__ = "addon"
     __version__ = "0.14"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __config__ = [("enabled", "bool", "Activated", True)]
 

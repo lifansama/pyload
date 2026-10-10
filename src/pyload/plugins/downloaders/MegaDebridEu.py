@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import json
 
 import pycurl
@@ -14,10 +13,8 @@ def args(**kwargs):
 class MegaDebridEu(MultiDownloader):
     __name__ = "MegaDebridEu"
     __type__ = "downloader"
-    __version__ = "0.59"
+    __version__ = "0.60"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://((?:www\d+\.|s\d+\.)?mega-debrid\.eu|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/download/file/[\w^_]+"
     __config__ = [
@@ -37,9 +34,10 @@ class MegaDebridEu(MultiDownloader):
         ("FoxyDarnec", "goupildavid[AT]gmail[DOT]com"),
     ]
 
+    # See https://www.mega-debrid.eu/index.php?page=api
     API_URL = "https://www.mega-debrid.eu/api.php"
 
-    def api_response(self, action, get={}, post={}):
+    def api_request(self, action, get=None, post=None):
         get["action"] = action
 
         # Better use pyLoad User-Agent so we don't get blocked
@@ -53,10 +51,10 @@ class MegaDebridEu(MultiDownloader):
 
     def handle_premium(self, pyfile):
         try:
-            res = self.api_response(
+            res = self.api_request(
                 "getLink",
                 get=args(
-                    token=self.account.info["data"]["cache_info"][self.account.user][
+                    token=self.account.get_data("cache_info")[self.account.user][
                         "token"
                     ]
                 ),

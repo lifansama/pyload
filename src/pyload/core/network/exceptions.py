@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: vuolter
 
 
 class Abort(Exception):

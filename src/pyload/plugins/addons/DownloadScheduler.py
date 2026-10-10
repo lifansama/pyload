@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import re
 import time
 
@@ -8,10 +7,8 @@ from ..base.addon import BaseAddon
 class DownloadScheduler(BaseAddon):
     __name__ = "DownloadScheduler"
     __type__ = "addon"
-    __version__ = "0.30"
+    __version__ = "0.31"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __config__ = [
         ("enabled", "bool", "Activated", False),
@@ -34,6 +31,7 @@ class DownloadScheduler(BaseAddon):
     __authors__ = [
         ("zoidberg", "zoidberg@mujmail.cz"),
         ("stickell", "l.stickell@yahoo.it"),
+        ("GammaC0de", "nitzo2001[AT]yahoo[DOT]com"),
     ]
 
     def activate(self):
@@ -68,14 +66,15 @@ class DownloadScheduler(BaseAddon):
         t0 = time.localtime()
         now = (t0.tm_hour, t0.tm_min, t0.tm_sec, "X")
         schedule = sorted(
-            [(int(x[0]), int(x[1]), 0, int(x[2])) for x in schedule] + [now]
+            [(int(x[0]), int(x[1]), 0, int(x[2])) for x in schedule] + [now],
+            key=lambda a: (a[0], a[1], a[2], a[3] == "X")
         )
 
         self.log_debug("Schedule", schedule)
 
         for i, v in enumerate(schedule):
             if v[3] == "X":
-                last, next = schedule[i - 1], schedule[(i + 1).format(len(schedule))]
+                last, next = schedule[i - 1], schedule[(i + 1) % len(schedule)]
                 self.log_debug("Now/Last/Next", now, last, next)
 
                 self.set_download_speed(last[3])
@@ -89,6 +88,7 @@ class DownloadScheduler(BaseAddon):
                 self.cb = self.pyload.scheduler.add_job(
                     next_time, self.update_schedule, threaded=False
                 )
+                break
 
     def set_download_speed(self, speed):
         if speed == 0:
@@ -110,12 +110,12 @@ class DownloadScheduler(BaseAddon):
 
             if speed > 0:
                 self.log_info(self._("Setting download speed to {} kB/s").format(speed))
-                self.pyload.config.set("download", "limit_speed", 1)
+                self.pyload.config.set("download", "limit_speed", True)
                 self.pyload.config.set("download", "max_speed", speed)
 
             else:
                 self.log_info(self._("Setting download speed to FULL"))
-                self.pyload.config.set("download", "limit_speed", 0)
+                self.pyload.config.set("download", "limit_speed", False)
                 self.pyload.config.set("download", "max_speed", -1)
 
             # Make new speed values take effect

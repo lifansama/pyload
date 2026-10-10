@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: vuolter
-
 import inspect
 import io
 import os
@@ -8,8 +5,8 @@ import pprint
 import sys
 import traceback
 
-from pyload.utils.check import proprieties
-from pyload.utils.fs import makefile
+from .check import proprieties
+from .fs import makefile
 
 
 def report(value, dirname):

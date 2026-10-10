@@ -13,8 +13,6 @@ class AndroidfilehostCom(SimpleDownloader):
     __version__ = "0.07"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
     __pattern__ = r"https?://(?:www\.)?androidfilehost\.com/\?fid=\d+"
     __config__ = [
         ("enabled", "bool", "Activated", True),
@@ -50,13 +48,13 @@ class AndroidfilehostCom(SimpleDownloader):
         fid = re.search(r'id="fid" value="(\d+)" />', self.data).group(1)
         self.log_debug(f"FID: {fid}")
 
-        self.req.http.c.setopt(pycurl.HTTPHEADER, ["X-MOD-SBB-CTYPE: xhr"])
+        self.req.http.set_header("X-MOD-SBB-CTYPE", "xhr")
 
         html = self.load(
             "https://androidfilehost.com/libs/otf/mirrors.otf.php",
             post={"submit": "submit", "action": "getdownloadmirrors", "fid": fid},
         )
-        self.req.http.c.setopt(pycurl.HTTPHEADER, ["X-MOD-SBB-CTYPE:"])
+        self.req.http.remove_header("X-MOD-SBB-CTYPE")
 
         self.link = re.findall('"url":"(.*?)"', html)[0].replace("\\", "")
         mirror_host = self.link.split("/")[2]

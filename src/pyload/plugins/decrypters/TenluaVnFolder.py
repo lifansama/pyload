@@ -1,8 +1,4 @@
-# -*- coding: utf-8 -*-
-
 import json
-
-from pyload.core.network.request_factory import get_url
 
 from ..base.simple_decrypter import SimpleDecrypter
 
@@ -10,10 +6,8 @@ from ..base.simple_decrypter import SimpleDecrypter
 class TenluaVnFolder(SimpleDecrypter):
     __name__ = "TenluaVnFolder"
     __type__ = "decrypter"
-    __version__ = "0.02"
+    __version__ = "0.03"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?tenlua\.vn/folder/.+?/(?P<ID>[0-9a-f]+)/"
     __config__ = [
@@ -34,13 +28,12 @@ class TenluaVnFolder(SimpleDecrypter):
 
     API_URL = "https://api2.tenlua.vn/"
 
-    @classmethod
-    def api_response(cls, method, **kwargs):
+    def api_request(self, method, **kwargs):
         kwargs["a"] = method
-        return json.loads(get_url(cls.API_URL, post=json.dumps([kwargs])))
+        return json.loads(self.load(self.API_URL, post=json.dumps([kwargs])))
 
     def decrypt(self, pyfile):
-        folder_info = self.api_response(
+        folder_info = self.api_request(
             "filemanager_gettree", p=self.info["pattern"]["ID"], download=1
         )
         pack_links = [

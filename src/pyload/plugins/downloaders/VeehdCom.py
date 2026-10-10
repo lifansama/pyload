@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import re
 
 from ..base.downloader import BaseDownloader
@@ -9,8 +8,6 @@ class VeehdCom(BaseDownloader):
     __type__ = "downloader"
     __version__ = "0.29"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://veehd\.com/video/\d+_\S+"
     __config__ = [

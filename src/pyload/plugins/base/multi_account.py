@@ -1,10 +1,7 @@
-# -*- coding: utf-8 -*-
-
 import re
 import time
 from datetime import timedelta
 
-from pyload.core.utils.old import decode
 from pyload.core.utils.purge import chars as remove_chars
 from pyload.core.utils.purge import uniquify
 
@@ -14,19 +11,17 @@ from .account import BaseAccount
 class MultiAccount(BaseAccount):
     __name__ = "MultiAccount"
     __type__ = "account"
-    __version__ = "0.22"
+    __version__ = "0.24"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __config__ = [
         ("enabled", "bool", "Activated", True),
-        ("mh_mode", "all;listed;unlisted", "Hosters to use", "all"),
-        ("mh_list", "str", "Hoster list (comma separated)", ""),
+        ("mh_mode", "all;listed;unlisted", "Filter downloaders to use", "all"),
+        ("mh_list", "str", "Downloader list (comma separated)", ""),
         ("mh_interval", "int", "Reload interval in hours", 12),
     ]
 
-    __description__ = """Multi-hoster account plugin"""
+    __description__ = """Multi-downloader account plugin"""
     __license__ = "GPLv3"
     __authors__ = [
         ("Walter Purcaro", "vuolter@gmail.com"),
@@ -34,6 +29,7 @@ class MultiAccount(BaseAccount):
     ]
 
     DOMAIN_REPLACEMENTS = [
+        (r"ddl\.to", "ddownload.com"),
         (r"180upload\.com", "hundredeightyupload.com"),
         (r"bayfiles\.net", "bayfiles.com"),
         (r"cloudnator\.com", "shragle.com"),
@@ -89,13 +85,12 @@ class MultiAccount(BaseAccount):
 
             self.pyload.addon_manager.add_event("plugin_updated", self.plugins_updated)
 
-            interval = timedelta(hours=self.config.get("mh_interval", 12)).seconds
-            self.periodical.start(interval, threaded=True, delay=2)
+            self.periodical.start(3, threaded=True)
 
         else:
             self.log_warning(
                 self._(
-                    "Multi-hoster feature will be deactivated due missing plugin reference"
+                    "Multi-downloader feature will be deactivated due missing plugin reference"
                 )
             )
 
@@ -126,7 +121,7 @@ class MultiAccount(BaseAccount):
         )
 
         domains = [
-            decode(domain).strip().lower()
+            domain.strip().lower()
             for url in list
             for domain in _re.findall(url)
         ]
@@ -147,7 +142,7 @@ class MultiAccount(BaseAccount):
 
         except Exception as exc:
             self.log_warning(
-                self._("Error loading hoster list for user `{}`").format(self.user),
+                self._("Error loading downloader list for user `{}`").format(self.user),
                 exc,
                 exc_info=self.pyload.debug > 1,
                 stack_info=self.pyload.debug > 2,
@@ -155,7 +150,7 @@ class MultiAccount(BaseAccount):
 
         finally:
             self.log_debug(
-                "Hoster list for user `{}`: {}".format(
+                "Downloader list for user `{}`: {}".format(
                     self.user, self.info["data"]["hosters"]
                 )
             )
@@ -163,7 +158,7 @@ class MultiAccount(BaseAccount):
 
     def grab_hosters(self, user, password, data):
         """
-        Load list of supported hoster.
+        Load list of supported downloaders.
 
         :return: List of domain names
         """
@@ -175,10 +170,10 @@ class MultiAccount(BaseAccount):
         excluded = []
         self.supported = []
 
-        if self.plugintype == "hoster":
+        if self.plugintype == "downloader":
             plugin_map = {
                 name.lower(): name
-                for name in self.pyload.plugin_manager.hoster_plugins.keys()
+                for name in self.pyload.plugin_manager.downloader_plugins.keys()
             }
 
             account_list = [
@@ -191,7 +186,7 @@ class MultiAccount(BaseAccount):
             plugin_map = {}
             account_list = [
                 name[::-1].replace("Folder"[::-1], "", 1).lower()[::-1]
-                for name in self.pyload.plugin_manager.crypter_plugins.keys()
+                for name in self.pyload.plugin_manager.decrypter_plugins.keys()
             ]
 
         for plugin in self.get_plugins():
@@ -239,7 +234,7 @@ class MultiAccount(BaseAccount):
         if new_supported:
             plugins = sorted(new_supported)
 
-            self.log_debug(f"New {self.plugintype}: {', '.join(plugins)}")
+            self.log_debug(f"New {self.plugintype}s: {', '.join(plugins)}")
 
             #: Create new regexp
             domains = "|".join(x.replace(".", r"\.") for x in plugins)
@@ -317,7 +312,14 @@ class MultiAccount(BaseAccount):
     def reactivate(self, refresh=False):
         reloading = self.info["data"].get("hosters") is not None
 
-        if not self.info["login"]["valid"]:
+        if self.info['login']['valid'] is None:
+            return
+
+        else:
+            interval = self.config.get('mh_interval', 12) * 60 * 60
+            self.periodical.set_interval(interval)
+
+        if self.info['login']['valid'] is False:
             self.fail_count += 1
             if self.fail_count < 3:
                 if reloading:
@@ -334,7 +336,7 @@ class MultiAccount(BaseAccount):
                         )
                     )
 
-                self.periodical.set_interval(timedelta(minutes=5).seconds)
+                self.periodical.set_interval(timedelta(minutes=5).total_seconds())
 
             else:
                 if reloading:
@@ -373,7 +375,7 @@ class MultiAccount(BaseAccount):
                             )
                         )
 
-                    self.periodical.set_interval(timedelta(minutes=5).seconds)
+                    self.periodical.set_interval(timedelta(minutes=5).total_seconds())
 
                 else:
                     if reloading:
@@ -394,15 +396,6 @@ class MultiAccount(BaseAccount):
 
                 return
 
-        #: Make sure we have one active addon
-        try:
-            self.pyload.addon_manager.remove_event(
-                "plugin_updated", self.plugins_updated
-            )
-
-        except ValueError:
-            pass
-
         self.pyload.addon_manager.add_event("plugin_updated", self.plugins_updated)
 
         if refresh or not reloading:
@@ -414,7 +407,7 @@ class MultiAccount(BaseAccount):
                             "Failed to load hoster list for user `{}`, retry in 5 minutes"
                         ).format(self.user)
                     )
-                    self.periodical.set_interval(timedelta(minutes=5).seconds)
+                    self.periodical.set_interval(timedelta(minutes=5).total_seconds())
 
                 else:
                     self.log_error(
@@ -429,7 +422,7 @@ class MultiAccount(BaseAccount):
         if self.fail_count:
             self.fail_count = 0
 
-            interval = timedelta(hours=self.config.get("mh_interval", 12)).seconds
+            interval = timedelta(hours=self.config.get("mh_interval", 12)).total_seconds()
             self.periodical.set_interval(interval)
 
         self._override()
@@ -440,13 +433,9 @@ class MultiAccount(BaseAccount):
         """
         self.log_info(self._("Reverting back to default hosters"))
 
-        try:
-            self.pyload.addon_manager.remove_event(
-                "plugin_updated", self.plugins_updated
-            )
-
-        except ValueError:
-            pass
+        self.pyload.addon_manager.remove_event(
+            "plugin_updated", self.plugins_updated
+        )
 
         self.periodical.stop()
 
@@ -463,10 +452,12 @@ class MultiAccount(BaseAccount):
         hdict["pattern"] = getattr(self.pluginclass, "__pattern__", r"^unmatchable$")
         hdict["re"] = re.compile(hdict["pattern"])
 
-    def update_accounts(self, user, password=None, options={}):
+    def update_accounts(self, user, password=None, options=None):
+        options = options or {}
+
         super().update_accounts(user, password, options)
         if self.need_reactivate:
-            interval = timedelta(hours=self.config.get("mh_interval", 12)).seconds
+            interval = timedelta(hours=self.config.get("mh_interval", 12)).total_seconds()
             self.periodical.restart(interval, threaded=True, delay=2)
 
         self.need_reactivate = True

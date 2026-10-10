@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 #
 # Test links:
 # http://speedy.sh/ep2qY/Zapp-Brannigan.jpg
@@ -14,8 +12,6 @@ class SpeedyshareCom(SimpleDownloader):
     __type__ = "downloader"
     __version__ = "0.11"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?(speedyshare\.com|speedy\.sh)/\w+"
     __config__ = [

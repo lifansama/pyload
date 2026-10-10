@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import re
 import time
 
@@ -10,8 +9,6 @@ class HellshareCz(BaseAccount):
     __type__ = "account"
     __version__ = "0.26"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __description__ = """Hellshare.cz account plugin"""
     __license__ = "GPLv3"

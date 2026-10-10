@@ -1,18 +1,16 @@
-# -*- coding: utf-8 -*-
 import re
 
 from pyload.core.network.exceptions import Fail
 
+from ..helpers import replace_patterns
 from .simple_downloader import SimpleDownloader
 
 
 class MultiDownloader(SimpleDownloader):
     __name__ = "MultiDownloader"
     __type__ = "downloader"
-    __version__ = "0.67"
+    __version__ = "0.72"
     __status__ = "stable"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"^unmatchable$"
     __config__ = [
@@ -34,10 +32,13 @@ class MultiDownloader(SimpleDownloader):
     OFFLINE_PATTERN = r"^unmatchable$"
     TEMP_OFFLINE_PATTERN = r"^unmatchable$"
 
-    LEECH_HOSTER = False
+    DIRECT_LINK = None
+
+    def get_info(self, url="", html=""):
+        return super(SimpleDownloader, self).get_info(url, html)
 
     def init(self):
-        self.PLUGIN_NAME = self.pyload.plugin_manager.hoster_plugins.get(
+        self.PLUGIN_NAME = self.pyload.plugin_manager.downloader_plugins.get(
             self.classname
         )["name"]
 
@@ -51,20 +52,21 @@ class MultiDownloader(SimpleDownloader):
         self.multi_dl = bool(self.account)
         self.resume_download = self.premium
 
-    # TODO: Recheck in 0.6.x
-    def setup_base(self):
-        klass = self.pyload.plugin_manager.load_class("downloader", self.classname)
-        self.get_info = klass.get_info
-
-        super().setup_base()
+    def _preload(self):
+        pass
 
     def _prepare(self):
         super()._prepare()
 
+        if self.pyfile.pluginname != self.__name__:
+            overwritten_plugin = self.pyload.plugin_manager.load_class("downloader", self.pyfile.pluginname)
+            if overwritten_plugin is not None:
+                self.pyfile.url = replace_patterns(self.pyfile.url, overwritten_plugin.URL_REPLACEMENTS)
+
         if self.DIRECT_LINK is None:
-            self.direct_dl = self.__pattern__ != r"^unmatchable$" and re.match(
+            self.direct_dl = self.__pattern__ != r'^unmatchable$' and re.match(
                 self.__pattern__, self.pyfile.url
-            )
+            ) is not None
 
         else:
             self.direct_dl = self.DIRECT_LINK
@@ -74,7 +76,7 @@ class MultiDownloader(SimpleDownloader):
             super()._process(thread)
 
         except Fail as exc:
-            hdict = self.pyload.plugin_manager.hoster_plugins.get(
+            hdict = self.pyload.plugin_manager.downloader_plugins.get(
                 self.pyfile.pluginname, {}
             )
             if self.config.get("revert_failed", True) and hdict.get("new_module"):
@@ -87,7 +89,7 @@ class MultiDownloader(SimpleDownloader):
                 hdict["new_module"] = tmp_module
                 hdict["new_name"] = tmp_name
 
-                self.restart(self._("Revert to original hoster plugin"))
+                self.restart(self._("Revert to original downloader plugin"))
 
             else:
                 raise

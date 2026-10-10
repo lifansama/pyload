@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import hashlib
 import json
 import time
@@ -10,14 +8,12 @@ from ..base.multi_account import MultiAccount
 class SmoozedCom(MultiAccount):
     __name__ = "SmoozedCom"
     __type__ = "account"
-    __version__ = "0.13"
+    __version__ = "0.14"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
     __config__ = [
-        ("mh_mode", "all;listed;unlisted", "Filter hosters to use", "all"),
-        ("mh_list", "str", "Hoster list (comma separated)", ""),
+        ("mh_mode", "all;listed;unlisted", "Filter downloaders to use", "all"),
+        ("mh_list", "str", "Downloader list (comma separated)", ""),
         ("mh_interval", "int", "Reload interval in hours", 12),
     ]
 
@@ -41,7 +37,7 @@ class SmoozedCom(MultiAccount):
                 "validuntil": float(status["data"]["user"]["user_premium"]),
                 "trafficleft": max(
                     0, status["data"]["traffic"][1] - status["data"]["traffic"][0]
-                ),
+                ) << 10,
                 "session": status["data"]["session_key"],
                 "hosters": [hoster["name"] for hoster in status["data"]["hoster"]],
             }

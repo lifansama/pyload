@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from logging import getLogger
 
 from pyload import APPID
@@ -9,13 +7,13 @@ from .http.http_request import HTTPRequest
 
 
 class Browser:
-    def __init__(self, bucket=None, options={}):
+    def __init__(self, bucket=None, options=None):
         self.log = getLogger(APPID)
 
-        self.options = options  #: holds pycurl options
+        self.options = options or {}  #: holds pycurl options
         self.bucket = bucket
 
-        self.cj = None  #: needs to be setted later
+        self.cj = None  #: needs to be set later
         self.http = None
         self._size = 0
 
@@ -44,9 +42,7 @@ class Browser:
 
     @property
     def speed(self):
-        if self.dl:
-            return self.dl.speed
-        return 0
+        return 0 if not self.dl else self.dl.speed
 
     @property
     def size(self):
@@ -58,15 +54,11 @@ class Browser:
 
     @property
     def arrived(self):
-        if self.dl:
-            return self.dl.arrived
-        return 0
+        return 0 if not self.dl else self.dl.arrived
 
     @property
     def percent(self):
-        if not self.size:
-            return 0
-        return (self.arrived * 100) // self.size
+        return 0 if not self.size else (self.arrived * 100) // self.size
 
     def clear_cookies(self):
         if self.cj:
@@ -83,17 +75,18 @@ class Browser:
             self.dl.abort = True
 
     def http_download(
-        self,
-        url,
-        filename,
-        get={},
-        post={},
-        ref=True,
-        cookies=True,
-        chunks=1,
-        resume=False,
-        progress_notify=None,
-        disposition=False,
+            self,
+            url,
+            filename,
+            size=0,
+            get=None,
+            post=None,
+            referrer=True,
+            cookies=True,
+            chunks=1,
+            resume=False,
+            status_notify=None,
+            disposition=False,
     ):
         """
         this can also download ftp.
@@ -102,16 +95,18 @@ class Browser:
         self.dl = HTTPDownload(
             url,
             filename,
-            get,
-            post,
-            self.last_effective_url if ref else None,
-            self.cj if cookies else None,
-            self.bucket,
-            self.options,
-            progress_notify,
-            disposition,
+            size=size,
+            get=get,
+            post=post,
+            referer=self.last_effective_url if referrer else None,
+            cj=self.cj if cookies else None,
+            bucket=self.bucket,
+            options=self.options,
+            status_notify=status_notify,
+            disposition=disposition,
         )
         name = self.dl.download(chunks, resume)
+        self.http.code = self.dl.code
         self._size = self.dl.size
 
         self.dl = None
@@ -124,11 +119,23 @@ class Browser:
         """
         return self.http.load(*args, **kwargs)
 
+    def upload(self, *args, **kwargs):
+        """
+        perform upload.
+        """
+        return self.http.upload(*args, **kwargs)
+
     def put_header(self, name, value):
         """
         add a header to the request.
         """
         self.http.put_header(name, value)
+
+    def remove_header(self, name, value=b""):
+        """
+        remove a header from the request.
+        """
+        self.http.remove_header(name, value)
 
     def add_auth(self, pwd):
         """
@@ -136,13 +143,10 @@ class Browser:
 
         :param pwd: string, user:password
         """
-        self.options["auth"] = pwd
-        self.renew_http_request()  #: we need a new request
+        self.http.add_auth(pwd)
 
     def remove_auth(self):
-        if "auth" in self.options:
-            del self.options["auth"]
-        self.renew_http_request()
+        self.http.remove_auth()
 
     def set_option(self, name, value):
         """
@@ -151,8 +155,7 @@ class Browser:
         self.options[name] = value
 
     def delete_option(self, name):
-        if name in self.options:
-            del self.options[name]
+        self.options.pop(name, None)
 
     def clear_headers(self):
         self.http.clear_headers()

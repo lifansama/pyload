@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: vuolter
-
 from collections.abc import Mapping, MutableMapping
 
 
@@ -20,7 +17,7 @@ class InscDict(MutableMapping):
     `requests.structures.CaseInsensitiveDict`."""
 
     def __init__(self, *args, **kwargs):
-        super(InscDict, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def __getitem__(self, key):
         return self.__dict__[key.lower()][-1]
@@ -58,26 +55,3 @@ class InscDict(MutableMapping):
 
     def copy(self):
         return InscDict(self.__dict__.values())
-
-
-class HeaderDict(InscDict):
-
-    __slots__ = []
-
-    def __setitem__(self, key, value):
-        InscDict.__setitem__(self, key, value.split(","))
-
-    def __str__(self):
-        return f"<Header {self.__dict__}>"
-
-    def list(self):
-        """Converts all entries to header list usable by curl."""
-        header = []
-        for key, val in self.__dict__.values():
-            fields = ",".join(val)
-            if fields:
-                header.append(f"{key}: {fields}")
-            else:
-                # NOTE: curl will remove this header
-                header.append(f"{key}:")
-        return header

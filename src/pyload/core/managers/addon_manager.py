@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: RaNaN, mkaay
-
-
 from functools import wraps
 from threading import RLock
 from types import MethodType
@@ -9,7 +5,7 @@ from types import MethodType
 from _thread import start_new_thread
 
 from ..threads.addon_thread import AddonThread
-from ..utils.old import lock
+from ..utils.struct.lock import lock
 from .plugin_manager import literal_eval
 
 
@@ -31,7 +27,7 @@ class AddonManager:
     Manages addons, delegates and handles Events.
 
     Every plugin can define events, \
-    but some very usefull events are called by the Core.
+    but some very useful events are called by the Core.
     Contrary to overwriting addon methods you can use event listener,
     which provides additional entry point in the control flow.
     Only do very short tasks or use threads.
@@ -43,7 +39,7 @@ class AddonManager:
     Name                     Arguments      Description
     ===================== ============== ==================================
     download_preparing     fid            A download was just queued and will be prepared now.
-    download_starts        fid            A plugin will immediately starts the download afterwards.
+    download_starts        fid            A plugin will immediately start the download afterwards.
     links_added            links, pid     Someone just added links, you are able to modify the links.
     all_downloads_processed                Every link was handled, pyload would idle afterwards.
     all_downloads_finished                 Every download in queue is finished.
@@ -63,7 +59,7 @@ class AddonManager:
 
         self.plugins = []
         self.plugin_map = {}
-        self.methods = {}  #: dict of names and list of methods usable by rpc
+        self.rpc_methods = {}  #: dict of plugin names and list of methods usable by rpc
 
         self.events = {}  #: contains events
 
@@ -72,115 +68,157 @@ class AddonManager:
             self.dispatch_event, "plugin_config_changed"
         )
 
-        self.add_event("plugin_config_changed", self.manage_addons)
+        self.add_event("plugin_config_changed", self._config_change_callback)
 
         self.lock = RLock()
         self.create_index()
 
-    def add_rpc(self, plugin, func, doc):
-        plugin = plugin.rpartition(".")[2]
+    def _config_change_callback(self, plugin_name, config_name, config_value):
+        if config_name == "enabled" and config_value:
+            self.activate_addon(plugin_name)
+        elif config_name == "enabled" and not config_value:
+            self.deactivate_addon(plugin_name)
+
+    def _add_module_rpcs(self, plugin_module):
+        rpc_methods = getattr(plugin_module, "rpc_methods", [])
+        for rpc_method in rpc_methods:
+            self.add_rpc(*rpc_method)
+
+    def add_rpc(self, plugin_name, method_name, doc):
+        plugin_name = plugin_name.rpartition(".")[2]
         doc = doc.strip() if doc else ""
 
-        if plugin in self.methods:
-            self.methods[plugin][func] = doc
-        else:
-            self.methods[plugin] = {func: doc}
+        if plugin_name in self.rpc_methods:
+            if method_name not in self.rpc_methods[plugin_name]:
+                self.rpc_methods[plugin_name][method_name] = doc
 
-    def call_rpc(self, plugin, func, args, parse):
+            else:
+                self.pyload.log.error(
+                    self._("Cannot expose RPC.. method {}.{}() already exposed").format(plugin_name, method_name),
+                    exc_info=self.pyload.debug > 1,
+                    stack_info=self.pyload.debug > 2,
+                )
+        else:
+            self.rpc_methods[plugin_name] = {method_name: doc}
+
+    def call_rpc(self, plugin_name, method_name, args, parse):
         if not args:
             args = tuple()
         if parse:
             args = tuple(literal_eval(x) for x in args)
 
-        plugin = self.plugin_map[plugin]
-        f = getattr(plugin, func)
+        plugin = self.plugin_map[plugin_name]
+        f = getattr(plugin, method_name)
         return f(*args)
 
     def create_index(self):
         plugins = []
 
         active = []
-        deactive = []
+        inactive = []
 
-        for pluginname in self.pyload.plugin_manager.addon_plugins:
+        for plugin_name in self.pyload.plugin_manager.addon_plugins:
             try:
                 # addon_class = getattr(plugin, plugin.__name__)
 
-                if self.pyload.config.get_plugin(pluginname, "enabled"):
-                    plugin_class = self.pyload.plugin_manager.load_class(
-                        "addon", pluginname
+                if self.pyload.config.get_plugin(plugin_name, "enabled"):
+                    plugin_module = self.pyload.plugin_manager.load_module(
+                        "addon", plugin_name
                     )
+                    if not plugin_module:
+                        continue
+                    plugin_class = getattr(plugin_module, plugin_name)
                     if not plugin_class:
+                        continue
+
+                    if plugin_class.__status__ == "broken":
+                        self.pyload.log.error(self._("Cannot activate broken addon: {}").format(plugin_name))
+                        self.pyload.config.set_plugin(plugin_name, "enabled", False)
+                        inactive.append(plugin_name)
                         continue
 
                     plugin = plugin_class(self.pyload, self)
                     plugins.append(plugin)
-                    self.plugin_map[plugin_class.__name__] = plugin
-                    if plugin.is_activated():
-                        active.append(plugin_class.__name__)
-                else:
-                    deactive.append(pluginname)
+                    self.plugin_map[plugin_name] = plugin
+                    active.append(plugin_name)
 
-            except Exception as exc:
+                    self._add_module_rpcs(plugin_module)
+
+                else:
+                    inactive.append(plugin_name)
+
+            except Exception:
                 self.pyload.log.warning(
-                    self._("Failed activating {}").format(pluginname),
+                    self._("Failed activating {}").format(plugin_name),
                     exc_info=self.pyload.debug > 1,
                     stack_info=self.pyload.debug > 2,
                 )
 
         self.pyload.log.info(
-            self._("Activated plugins: {}").format(", ".join(sorted(active)))
+            self._("Activated addons: {}").format(", ".join(sorted(active)))
         )
         self.pyload.log.info(
-            self._("Deactivate plugins: {}").format(", ".join(sorted(deactive)))
+            self._("Deactivate addons: {}").format(", ".join(sorted(inactive)))
         )
 
         self.plugins = plugins
 
-    def manage_addons(self, plugin, name, value):
-        if name == "enabled" and value:
-            self.activate_addon(plugin)
-        elif name == "enabled" and not value:
-            self.deactivate_addon(plugin)
-
-    def activate_addon(self, plugin):
+    @lock
+    def activate_addon(self, plugin_name):
 
         # check if already loaded
         for inst in self.plugins:
-            if inst.__name__ == plugin:
+            if inst.__name__ == plugin_name:
                 return
 
-        plugin_class = self.pyload.plugin_manager.load_class("addon", plugin)
-
+        plugin_module = self.pyload.plugin_manager.load_module(
+            "addon", plugin_name
+        )
+        if not plugin_module:
+            return
+        plugin_class = getattr(plugin_module, plugin_name)
         if not plugin_class:
             return
 
-        self.pyload.log.debug(f"Plugin loaded: {plugin}")
+        if plugin_class.__status__ == "broken":
+            self.pyload.log.error(self._("Cannot activate broken addon: {}").format(plugin_name))
+            self.pyload.config.set_plugin(plugin_name, "enabled", False)
 
-        plugin = plugin_class(self.pyload, self)
-        self.plugins.append(plugin)
-        self.plugin_map[plugin_class.__name__] = plugin
+        else:
+            self.pyload.log.debug(f"Addon loaded: {plugin_name}")
 
-        # call core Ready
-        start_new_thread(plugin.core_ready, tuple())
+            plugin = plugin_class(self.pyload, self)
+            self.plugins.append(plugin)
+            self.plugin_map[plugin_name] = plugin
 
-    def deactivate_addon(self, plugin):
+            self._add_module_rpcs(plugin_module)
 
-        addon = None
+            # call core Ready
+            start_new_thread(plugin.core_ready, tuple())
+
+    @lock
+    def deactivate_addon(self, plugin_name):
         for inst in self.plugins:
-            if inst.__name__ == plugin:
+            if inst.__name__ == plugin_name:
                 addon = inst
-
-        if not addon:
+                break
+        else:
             return
 
-        self.pyload.log.debug(f"Plugin unloaded: {plugin}")
+        self.pyload.log.debug(f"Addon unloaded: {plugin_name}")
 
         addon.unload()
 
         # remove periodic call
         res = self.pyload.scheduler.remove_job(addon.cb)
-        self.pyload.log.debug(f"Removed callback {res}")
+        self.pyload.log.debug(f"ADDON {plugin_name}: Removed callback {res}")
+
+        # remove rpc calls
+        try:
+            del self.rpc_methods[plugin_name]
+        except KeyError:
+            pass
+
         self.plugins.remove(addon)
         del self.plugin_map[addon.__name__]
 
@@ -212,10 +250,7 @@ class AddonManager:
     def download_finished(self, pyfile):
         for plugin in self.plugins:
             if plugin.is_activated():
-                if "download_finished" in plugin.__threaded__:
-                    self.start_thread(plugin.download_finished, pyfile)
-                else:
-                    plugin.download_finished(pyfile)
+                plugin.download_finished(pyfile)
 
         self.dispatch_event("download_finished", pyfile)
 
@@ -224,10 +259,7 @@ class AddonManager:
     def download_failed(self, pyfile):
         for plugin in self.plugins:
             if plugin.is_activated():
-                if "download_failed" in plugin.__threaded__:
-                    self.start_thread(plugin.download_finished, pyfile)
-                else:
-                    plugin.download_failed(pyfile)
+                plugin.download_failed(pyfile)
 
         self.dispatch_event("download_failed", pyfile)
 
@@ -235,27 +267,24 @@ class AddonManager:
     def package_finished(self, package):
         for plugin in self.plugins:
             if plugin.is_activated():
-                if "package_finished" in plugin.__threaded__:
-                    self.start_thread(plugin.package_finished, package)
-                else:
-                    plugin.package_finished(package)
+                plugin.package_finished(package)
 
         self.dispatch_event("package_finished", package)
 
     @lock
-    def before_reconnecting(self, ip):
+    def before_reconnect(self, ip):
         for plugin in self.plugins:
-            plugin.before_reconnecting(ip)
+            plugin.before_reconnect(ip)
 
-        self.dispatch_event("before_reconnecting", ip)
+        self.dispatch_event("before_reconnect", ip)
 
     @lock
-    def after_reconnecting(self, ip):
+    def after_reconnect(self, ip, old_ip):
         for plugin in self.plugins:
             if plugin.is_activated():
-                plugin.after_reconnecting(ip)
+                plugin.after_reconnect(ip, old_ip)
 
-        self.dispatch_event("after_reconnecting", ip)
+        self.dispatch_event("after_reconnect", old_ip, ip)
 
     def start_thread(self, function, *args, **kwargs):
         return AddonThread(self.pyload.thread_manager, function, args, kwargs)

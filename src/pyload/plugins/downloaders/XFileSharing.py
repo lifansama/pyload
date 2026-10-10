@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 
 from ..base.xfs_downloader import XFSDownloader
@@ -8,14 +6,12 @@ from ..base.xfs_downloader import XFSDownloader
 class XFileSharing(XFSDownloader):
     __name__ = "XFileSharing"
     __type__ = "downloader"
-    __version__ = "0.65"
+    __version__ = "0.67"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"^unmatchable$"
     __config__ = [
-        ("enabled", "bool", "Activated", True),
+        ("enabled", "bool", "Activated", False),
         ("use_premium", "bool", "Use premium account if available", True),
         ("fallback", "bool", "Fallback to free download if premium fails", True),
         ("chk_filesize", "bool", "Check file size", True),
@@ -33,7 +29,7 @@ class XFileSharing(XFSDownloader):
         return super()._log(level, plugintype, pluginname, args, kwargs)
 
     def init(self):
-        self.__pattern__ = self.pyload.plugin_manager.hoster_plugins[self.classname][
+        self.__pattern__ = self.pyload.plugin_manager.downloader_plugins[self.classname][
             "pattern"
         ]
 
@@ -60,7 +56,7 @@ class XFileSharing(XFSDownloader):
                 self.PLUGIN_NAME, self.account.user
             )
             # NOTE: Don't call get_info here to reduce overhead
-            self.premium = self.account.info["data"]["premium"]
+            self.premium = self.account.get_data("premium")
         else:
             self.req = self.pyload.request_factory.get_request(self.classname)
             self.premium = False

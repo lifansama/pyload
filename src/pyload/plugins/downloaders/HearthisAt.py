@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import json
 import re
 
@@ -10,8 +9,6 @@ class HearthisAt(BaseDownloader):
     __type__ = "downloader"
     __version__ = "0.03"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?hearthis\.at/.*#pyload$"
     __config__ = [("enabled", "bool", "Activated", True)]

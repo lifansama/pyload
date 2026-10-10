@@ -1,9 +1,8 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: mkaay
-
 import time
+from threading import RLock
 
 from ..utils.purge import uniquify
+from ..utils.struct.lock import lock
 
 
 class EventManager:
@@ -11,31 +10,36 @@ class EventManager:
         self.pyload = core
         self._ = core._
         self.clients = []
+        self.lock = RLock()
 
+    @lock
     def new_client(self, uuid):
         self.clients.append(Client(uuid))
 
+    @lock
     def clean(self):
-        for n, client in enumerate(self.clients):
-            if client.last_active + 30 < time.time():
-                del self.clients[n]
+        self.clients[:] = [
+            c for c in self.clients
+            if c.last_active + 30 >= time.monotonic()
+        ]
 
+    @lock
     def get_events(self, uuid):
+        self.clean()  #: purge inactive clients before processing new ones
         events = []
-        valid_uuid = False
         for client in self.clients:
             if client.uuid == uuid:
-                client.last_active = time.time()
-                valid_uuid = True
+                client.last_active = time.monotonic()
                 while client.new_events():
                     events.append(client.pop_event().to_list())
                 break
-        if not valid_uuid:
+        else:
             self.new_client(uuid)
             events = [
                 ReloadAllEvent("queue").to_list(),
                 ReloadAllEvent("collector").to_list(),
             ]
+
         return uniquify(events)  # return uniquify(events, repr)
 
     def add_event(self, event):
@@ -46,7 +50,7 @@ class EventManager:
 class Client:
     def __init__(self, uuid):
         self.uuid = uuid
-        self.last_active = time.time()
+        self.last_active = time.monotonic()
         self.events = []
 
     def new_events(self):

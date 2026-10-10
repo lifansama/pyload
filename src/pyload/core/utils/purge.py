@@ -1,16 +1,12 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: vuolter
-
-import os
 import re
-import sys
 
 
 def chars(text, chars, repl=""):
     """
     Removes all chars in repl from text.
     """
-    return re.sub(rf"[{chars}]+", repl, text)
+    chars = chars.replace("\\", "\\\\")
+    return re.sub(rf"[{chars}]", repl, text)
 
 
 _UNIXBADCHARS = ("\0", "/", "\\")
@@ -40,20 +36,15 @@ _WINBADWORDS = (
 )
 
 
-def name(text, sep="_", allow_whitespaces=False):
+def name(text, sep="_", allow_whitespaces=True):
     """Remove invalid characters."""
-    if os.name == "nt":
-        bc = _WINBADCHARS
-    elif sys.platform == "darwin":
-        bc = _MACBADCHARS
-    else:
-        bc = _UNIXBADCHARS
+    bc = uniquify(_WINBADCHARS + _MACBADCHARS + _UNIXBADCHARS)
     repl = r"".join(bc)
     if not allow_whitespaces:
         repl += " "
-    res = char(text, repl, sep).strip()
-    if os.name == "nt" and res.lower() in _WINBADWORDS:
-        res = sep + res
+    res = chars(text, repl, sep).strip()
+    if res.lower() in _WINBADWORDS:
+        res = (sep or "_") + res
     return res
 
 
@@ -71,13 +62,23 @@ def pattern(text, rules):
 def truncate(text, to_length):
     min_length = len(text) // 2
     if to_length <= min_length:
-        return
+        raise OSError("File name too long")
     offset = to_length // 3
-    return f"{text[:offset * 2]}~{text[-offset + to_length % 3:]}"
+    return f"{text[:offset * 2]}~{text[-(offset - 1 + to_length % 3):]}"
 
 
 def uniquify(seq):
-    """Remove duplicates from list preserving order."""
+    """Remove duplicates from seq preserving order."""
+
     seen = set()
-    seen_add = seen.add
-    return type(seq)(x for x in seq if x not in seen and not seen_add(x))
+
+    def make_hashable(item):
+        if isinstance(item, list):
+            return tuple(make_hashable(x) for x in item)
+        elif isinstance(item, dict):
+            return tuple(sorted((k, make_hashable(v)) for k, v in item.items()))
+        elif isinstance(item, set):
+            return tuple(sorted(make_hashable(x) for x in item))
+        return item
+
+    return type(seq)(x for x in seq if not (make_hashable(x) in seen or seen.add(make_hashable(x))))

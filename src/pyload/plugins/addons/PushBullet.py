@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-
-
 import pycurl
 from pyload.core.network.request_factory import get_request
 
@@ -10,10 +7,8 @@ from ..base.notifier import Notifier
 class PushBullet(Notifier):
     __name__ = "PushBullet"
     __type__ = "addon"
-    __version__ = "0.05"
+    __version__ = "0.06"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __config__ = [
         ("enabled", "bool", "Activated", False),
@@ -22,6 +17,8 @@ class PushBullet(Notifier):
         ("reconnection", "bool", "Notify reconnection request", False),
         ("downloadfinished", "bool", "Notify download finished", True),
         ("downloadfailed", "bool", "Notify download failed", True),
+        ("alldownloadsfinished", "bool", "Notify all downloads finished", True),
+        ("alldownloadsprocessed", "bool", "Notify all downloads processed", True),
         ("packagefinished", "bool", "Notify package finished", True),
         ("packagefailed", "bool", "Notify package failed", True),
         ("update", "bool", "Notify pyLoad update", False),
@@ -40,7 +37,7 @@ class PushBullet(Notifier):
 
     def send(self, event, msg, key):
         req = get_request()
-        req.c.setopt(pycurl.HTTPHEADER, ["Access-Token: {}".format(str(key))])
+        req.set_header("Access-Token", str(key))
 
         self.load(
             "https://api.pushbullet.com/v2/pushes",

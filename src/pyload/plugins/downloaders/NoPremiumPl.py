@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import json
 
 from ..base.multi_downloader import MultiDownloader
@@ -9,8 +8,6 @@ class NoPremiumPl(MultiDownloader):
     __type__ = "downloader"
     __version__ = "0.13"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://direct\.nopremium\.pl.+"
     __config__ = [
@@ -50,7 +47,7 @@ class NoPremiumPl(MultiDownloader):
         query = self.API_QUERY.copy()
 
         query["username"] = self.account.user
-        query["password"] = self.account.info["data"]["hash_password"]
+        query["password"] = self.account.get_data("hash_password")
         query["url"] = url
 
         if mode == "fileinfo":

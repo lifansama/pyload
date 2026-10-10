@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import json
 import re
 
@@ -12,8 +10,6 @@ class MegacrypterCom(MegaCoNz):
     __version__ = "0.28"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
     __pattern__ = r"https?://\w{0,10}\.?megacrypter\.com/[\w\-!]+"
     __config__ = [("enabled", "bool", "Activated", True)]
 
@@ -24,7 +20,7 @@ class MegacrypterCom(MegaCoNz):
     API_URL = "http://megacrypter.com/api"
     FILE_SUFFIX = ".crypted"
 
-    def api_response(self, **kwargs):
+    def api_request(self, **kwargs):
         """
         Dispatch a call to the api, see megacrypter.com/api_doc.
         """
@@ -38,10 +34,10 @@ class MegacrypterCom(MegaCoNz):
         node = re.match(self.__pattern__, pyfile.url).group(0)
 
         #: get Mega.co.nz link info
-        info = self.api_response(link=node, m="info")
+        info = self.api_request(link=node, m="info")
 
         #: Get crypted file URL
-        dl = self.api_response(link=node, m="dl")
+        dl = self.api_request(link=node, m="dl")
 
         # TODO: map error codes, implement password protection
         # if info['pass'] is True:

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 
 from ..base.simple_downloader import SimpleDownloader
@@ -10,8 +8,6 @@ class PromptfileCom(SimpleDownloader):
     __type__ = "downloader"
     __version__ = "0.19"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?promptfile\.com/"
     __config__ = [

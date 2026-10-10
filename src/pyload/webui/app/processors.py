@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: vuolter
-
 import flask
 
 from .helpers import parse_permissions, parse_userdata

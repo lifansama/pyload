@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import hashlib
 import json
 
@@ -10,12 +8,10 @@ from ..base.multi_downloader import MultiDownloader
 
 
 class LinkifierCom(MultiDownloader):
-    __name__ = "AlldebridCom"
+    __name__ = "LinkifierCom"
     __type__ = "downloader"
-    __version__ = "0.02"
+    __version__ = "0.04"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"^unmatchable$"
     __config__ = [
@@ -34,30 +30,26 @@ class LinkifierCom(MultiDownloader):
     API_KEY = "d046c4309bb7cabd19f49118a2ab25e0"
     API_URL = "https://api.linkifier.com/downloadapi.svc/"
 
-    def api_response(self, method, user, password, **kwargs):
+    def api_request(self, method, user, password, **kwargs):
         post = {
             "login": user,
             "md5Pass": hashlib.md5(password.encode()).hexdigest(),
             "apiKey": self.API_KEY,
         }
         post.update(kwargs)
-        self.req.http.c.setopt(
-            pycurl.HTTPHEADER, ["Content-Type: application/json; charset=utf-8"]
-        )
+        self.req.http.set_header("Content-Type", "application/json; charset=utf-8")
         res = json.loads(self.load(self.API_URL + method, post=json.dumps(post)))
-        self.req.http.c.setopt(
-            pycurl.HTTPHEADER, ["Content-Type: text/html; charset=utf-8"]
-        )
+        self.req.http.set_header("Content-Type", "text/html; charset=utf-8")
         return res
 
     def setup(self):
         self.multi_dl = True
 
     def handle_premium(self, pyfile):
-        json_data = self.api_response(
+        json_data = self.api_request(
             "stream",
             self.account.user,
-            self.account.info["login"]["password"],
+            self.account.get_login("password"),
             url=pyfile.url,
         )
 
@@ -73,4 +65,4 @@ class LinkifierCom(MultiDownloader):
 
         self.resume_download = json_data["con_resume"]
         self.chunk_limit = json_data.get("con_max", 1) or 1
-        self.download(json_data["url"], fixurl=False)
+        self.url = json_data["url"]

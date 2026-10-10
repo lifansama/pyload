@@ -1,22 +1,17 @@
-# -*- coding: utf-8 -*-
-
 import re
 
 from pyload.core.network.http.exceptions import BadHeader
-from pyload.core.network.request_factory import get_url
 from pyload.core.utils import parse
 
-from ..helpers import replace_patterns
+from ..helpers import replace_patterns, search_pattern
 from .decrypter import BaseDecrypter
 
 
 class SimpleDecrypter(BaseDecrypter):
     __name__ = "SimpleDecrypter"
     __type__ = "decrypter"
-    __version__ = "0.93"
+    __version__ = "0.98"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"^unmatchable$"
     __config__ = [
@@ -81,9 +76,11 @@ class SimpleDecrypter(BaseDecrypter):
     PAGES_PATTERN = None
 
     NAME_PATTERN = None
-    OFFLINE_PATTERN = r"[^\w](404\s|[Ii]nvalid|[Oo]ffline|[Dd]elet|[Rr]emov|([Nn]o(t|thing)?|sn\'t) (found|(longer )?(available|exist)))"
+    OFFLINE_PATTERN = (
+        r"[^\w](?:404\s|[Nn]ot [Ff]ound|[Ff]ile (?:was|has been)?\s*(?:removed|deleted)|[Ff]ile (?:does not exist|could not be found|no longer available))"
+    )
     TEMP_OFFLINE_PATTERN = (
-        r"[^\w](503\s|[Mm]aint(e|ai)nance|[Tt]emp([.-]|orarily)|[Mm]irror)"
+        r"[^\w](?:503\s|[Ss]erver (?:is (?:in|under) )?[Mm]aint(?:e|ai)nance|[Tt]emp(?:[.-]|orarily )(?:[Oo]ffline|[Uu]available)|[Uu]se (?:[Aa] )?[Mm]irror)"
     )
 
     WAIT_PATTERN = None
@@ -92,15 +89,13 @@ class SimpleDecrypter(BaseDecrypter):
     SIZE_LIMIT_PATTERN = None
     ERROR_PATTERN = None
 
-    @classmethod
-    def api_info(cls, url):
+    def api_info(self, url):
         return {}
 
-    @classmethod
-    def get_info(cls, url="", html=""):
-        info = super(SimpleDecrypter, cls).get_info(url)
+    def get_info(self, url="", html=""):
+        info = super(SimpleDecrypter, self).get_info(url)
 
-        info.update(cls.api_info(url))
+        info.update(self.api_info(url))
 
         if not html and info["status"] != 2:
             if not url:
@@ -109,7 +104,7 @@ class SimpleDecrypter(BaseDecrypter):
 
             elif info["status"] in (3, 7):
                 try:
-                    html = get_url(url, cookies=cls.COOKIES, decode=cls.TEXT_ENCODING)
+                    html = self.load(url, cookies=self.COOKIES, decode=self.TEXT_ENCODING)
 
                 except BadHeader as exc:
                     info["error"] = "{}: {}".format(exc.code, exc.content)
@@ -118,24 +113,21 @@ class SimpleDecrypter(BaseDecrypter):
                     pass
 
         if html:
-            if cls.OFFLINE_PATTERN and re.search(cls.OFFLINE_PATTERN, html) is not None:
+            if search_pattern(self.OFFLINE_PATTERN, html) is not None:
                 info["status"] = 1
 
-            elif (
-                cls.TEMP_OFFLINE_PATTERN
-                and re.search(cls.TEMP_OFFLINE_PATTERN, html) is not None
-            ):
+            elif search_pattern(self.TEMP_OFFLINE_PATTERN, html) is not None:
                 info["status"] = 6
 
-            elif cls.NAME_PATTERN:
-                m = re.search(cls.NAME_PATTERN, html)
+            elif self.NAME_PATTERN:
+                m = search_pattern(self.NAME_PATTERN, html)
                 if m is not None:
                     info["status"] = 2
                     info["pattern"].update(m.groupdict())
 
         if "N" in info["pattern"]:
-            name = replace_patterns(info["pattern"]["N"], cls.NAME_REPLACEMENTS)
-            info["name"] = parse_name(name)
+            name = replace_patterns(info["pattern"]["N"], self.NAME_REPLACEMENTS)
+            info["name"] = parse.name(name)
 
         return info
 
@@ -148,7 +140,7 @@ class SimpleDecrypter(BaseDecrypter):
                 account_name, self.account.user
             )
             # NOTE: Don't call get_info here to reduce overhead
-            self.premium = self.account.info["data"]["premium"]
+            self.premium = self.account.get_data("premium")
         else:
             self.req = self.pyload.request_factory.get_request(account_name)
             self.premium = False
@@ -174,7 +166,7 @@ class SimpleDecrypter(BaseDecrypter):
             return
 
         self.data = self.load(
-            self.pyfile.url, cookies=self.COOKIES, ref=False, decode=self.TEXT_ENCODING
+            self.pyfile.url, cookies=self.COOKIES, referrer=False, decode=self.TEXT_ENCODING
         )
 
     def _prepare(self):
@@ -270,9 +262,9 @@ class SimpleDecrypter(BaseDecrypter):
 
     def handle_pages(self, pyfile):
         try:
-            pages = int(re.search(self.PAGES_PATTERN, self.data).group(1))
+            pages = int(search_pattern(self.PAGES_PATTERN, self.data).group(1))
 
-        except Exception:
+        except (AttributeError, IndexError, ValueError):
             pages = 1
 
         links = self.links
@@ -282,29 +274,30 @@ class SimpleDecrypter(BaseDecrypter):
 
         self.links = links
 
-    def check_errors(self):
+    def check_errors(self, data=None):
         self.log_info(self._("Checking for link errors..."))
 
-        if not self.data:
+        data = data or self.data
+
+        if not data:
             self.log_warning(self._("No data to check"))
             return
+        elif isinstance(data, bytes):
+            self.log_debug(self._("No check on binary data"))
+            return
 
-        if self.IP_BLOCKED_PATTERN and re.search(self.IP_BLOCKED_PATTERN, self.data):
+        if search_pattern(self.IP_BLOCKED_PATTERN, data):
             self.fail(self._("Connection from your current IP address is not allowed"))
 
         elif not self.premium:
-            if self.PREMIUM_ONLY_PATTERN and re.search(
-                self.PREMIUM_ONLY_PATTERN, self.data
-            ):
+            if search_pattern(self.PREMIUM_ONLY_PATTERN, data):
                 self.fail(self._("Link can be decrypted by premium users only"))
 
-            elif self.SIZE_LIMIT_PATTERN and re.search(
-                self.SIZE_LIMIT_PATTERN, self.data
-            ):
+            elif search_pattern(self.SIZE_LIMIT_PATTERN, data):
                 self.fail(self._("Link list too large for free decrypt"))
 
         if self.ERROR_PATTERN:
-            m = re.search(self.ERROR_PATTERN, self.data)
+            m = search_pattern(self.ERROR_PATTERN, data)
             if m is not None:
                 try:
                     errmsg = m.group(1)
@@ -318,10 +311,10 @@ class SimpleDecrypter(BaseDecrypter):
                 self.info["error"] = errmsg
                 self.log_warning(errmsg)
 
-                if re.search(self.TEMP_OFFLINE_PATTERN, errmsg):
+                if search_pattern(self.TEMP_OFFLINE_PATTERN, errmsg):
                     self.temp_offline()
 
-                elif re.search(self.OFFLINE_PATTERN, errmsg):
+                elif search_pattern(self.OFFLINE_PATTERN, errmsg):
                     self.offline()
 
                 elif re.search(r"limit|wait|slot", errmsg, re.I):
@@ -367,7 +360,7 @@ class SimpleDecrypter(BaseDecrypter):
                     self.restart(errmsg)
 
         elif self.WAIT_PATTERN:
-            m = re.search(self.WAIT_PATTERN, self.data)
+            m = search_pattern(self.WAIT_PATTERN, data)
             if m is not None:
                 try:
                     waitmsg = m.group(1).strip()

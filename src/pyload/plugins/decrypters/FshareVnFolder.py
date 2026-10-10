@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import json
 import re
 
@@ -14,8 +12,6 @@ class FshareVnFolder(BaseDecrypter):
     __type__ = "decrypter"
     __version__ = "0.11"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?fshare\.vn/folder/(?P<ID>\w+)"
     __config__ = [
@@ -47,9 +43,7 @@ class FshareVnFolder(BaseDecrypter):
     def enum_folder(self, folder_id):
         links = []
 
-        self.req.http.c.setopt(
-            pycurl.HTTPHEADER, ["Accept: application/json, text/plain, */*"]
-        )
+        self.req.http.set_header("Accept", "application/json, text/plain, */*")
         self.data = self.load(
             "https://www.fshare.vn/api/v3/files/folder", get={"linkcode": folder_id}
         )
@@ -82,9 +76,7 @@ class FshareVnFolder(BaseDecrypter):
             if current_page > last_page:
                 break
 
-            self.req.http.c.setopt(
-                pycurl.HTTPHEADER, ["Accept: application/json, text/plain, */*"]
-            )
+            self.req.http.set_header("Accept", "application/json, text/plain, */*")
             self.data = self.load(
                 "https://www.fshare.vn/api/v3/files/folder",
                 get={"linkcode": folder_id, "page": current_page},

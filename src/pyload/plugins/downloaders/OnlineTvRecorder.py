@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-
-
 from pyload.core.network.http.exceptions import BadHeader
 
 from .Http import Http
@@ -13,8 +10,6 @@ class OnlineTvRecorder(Http):
     __type__ = "downloader"
     __version__ = "0.05"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     # RIPE Database:
     # inetnum: 81.95.11.0 - 81.95.11.63

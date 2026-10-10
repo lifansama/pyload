@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-
-
 from .captcha import BaseCaptcha
 
 
@@ -9,8 +6,6 @@ class CaptchaService(BaseCaptcha):
     __type__ = "anticaptcha"
     __version__ = "0.36"
     __status__ = "stable"
-
-    __pyload_version__ = "0.5"
 
     __description__ = """Anti-captcha service plugin"""
     __license__ = "GPLv3"

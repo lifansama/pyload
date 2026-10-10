@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from ..base.simple_decrypter import SimpleDecrypter
 
 
@@ -8,8 +6,6 @@ class PastebinCom(SimpleDecrypter):
     __type__ = "decrypter"
     __version__ = "0.09"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https://(?:www\.)?pastebin\.com/(.+i=)?(?P<ID>\w{8})"
     __config__ = [

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import json
 import re
 from datetime import timedelta
@@ -9,18 +8,17 @@ from pyload.core.utils import seconds
 
 from ..anticaptchas.ReCaptcha import ReCaptcha
 from ..anticaptchas.SolveMedia import SolveMedia
+from ..anticaptchas.Turnstile import Turnstile
 from ..base.simple_downloader import SimpleDownloader
 
 
 class RapidgatorNet(SimpleDownloader):
     __name__ = "RapidgatorNet"
     __type__ = "downloader"
-    __version__ = "0.54"
+    __version__ = "0.60"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
-    __pattern__ = r"https?://(?:www\.)?(?:rapidgator\.net|rg\.to)/file/\w+"
+    __pattern__ = r"https?://(?:www\.)?(?:rapidgator\.(?:net|asia|)|rg\.to)/file/(?P<ID>\w+)"
     __config__ = [
         ("enabled", "bool", "Activated", True),
         ("use_premium", "bool", "Use premium account if available", True),
@@ -43,7 +41,7 @@ class RapidgatorNet(SimpleDownloader):
 
     NAME_PATTERN = r"<title>Download file (?P<N>.*)</title>"
     SIZE_PATTERN = r"File size:\s*<strong>(?P<S>[\d.,]+) (?P<U>[\w^_]+)</strong>"
-    OFFLINE_PATTERN = r">(File not found|Error 404)"
+    OFFLINE_PATTERN = r">(404 File not found|Error 404)"
 
     JSVARS_PATTERN = r"\s+var\s*(startTimerUrl|getDownloadUrl|captchaUrl|fid|secs)\s*=\s*\'?(.*?)\'?;"
 
@@ -58,29 +56,26 @@ class RapidgatorNet(SimpleDownloader):
     )
     WAIT_PATTERN = r"(?:Delay between downloads must be not less than|Try again in).+"
 
-    LINK_FREE_PATTERN = r"return \'(http://\w+.rapidgator.net/.*)\';"
+    LINK_FREE_PATTERN = r"return '(https?://\w+.rapidgator.net/.*)';"
 
     RECAPTCHA_PATTERN = r'"http://api\.recaptcha\.net/challenge\?k=(.*?)"'
-    ADSCAPTCHA_PATTERN = r'(http://api\.adscaptcha\.com/Get\.aspx[^"\']+)'
     SOLVEMEDIA_PATTERN = r'http://api\.solvemedia\.com/papi/challenge\.script\?k=(.*?)"'
 
-    URL_REPLACEMENTS = [
-        (r"//(?:www\.)?rg\.to/", "//rapidgator.net/"),
-        (r"(//rapidgator.net/file/[0-9A-z]+).*", r"\1"),
-    ]
+    URL_REPLACEMENTS = [(__pattern__ + '.*', r'https://rapidgator.net/file/\g<ID>')]
 
     API_URL = "https://rapidgator.net/api/"
 
-    def api_response(self, method, **kwargs):
+    def api_request(self, method, **kwargs):
         try:
-            html = self.load(self.API_URL + method, get=kwargs)
+            html = self.load(self.API_URL + method,
+                             get=kwargs)
             json_data = json.loads(html)
             status = json_data["response_status"]
             message = json_data["response_details"]
 
         except BadHeader as exc:
             status = exc.code
-            message = exc.message
+            message = exc.content
 
         if status == 200:
             return json_data["response"]
@@ -100,28 +95,32 @@ class RapidgatorNet(SimpleDownloader):
         self.chunk_limit = -1 if self.premium else 1
 
     def handle_premium(self, pyfile):
-        json_data = self.api_response(
-            "file/info", sid=self.account.info["data"]["sid"], url=pyfile.url
+        json_data = self.api_request(
+            "file/info",
+                    sid=self.account.get_data("sid"),
+            url=pyfile.url
         )
 
         self.info["md5"] = json_data["hash"]
         pyfile.name = json_data["filename"]
         pyfile.size = json_data["size"]
 
-        json_data = self.api_response(
-            "file/download", sid=self.account.info["data"]["sid"], url=pyfile.url
+        json_data = self.api_request(
+            "file/download",
+                    sid=self.account.get_data("sid"),
+            url=pyfile.url
         )
         self.link = json_data["url"]
 
     def check_errors(self):
-        SimpleDownloader.check_errors(self)
+        super().check_errors()
         m = re.search(self.DOWNLOAD_LIMIT_ERROR_PATTERN, self.data)
         if m is not None:
             self.log_warning(m.group(0))
             if m.group(1) == "daily":
                 wait_time = seconds.to_midnight()
             else:
-                wait_time = timedelta(hours=1).seconds
+                wait_time = timedelta(hours=1).total_seconds()
 
             self.retry(wait=wait_time, msg=m.group(0))
 
@@ -131,7 +130,7 @@ class RapidgatorNet(SimpleDownloader):
                 "You can't download more than one file within a certain time period in free mode"
             )
             self.log_warning(msg)
-            self.retry(wait=timedelta(hours=24).seconds, msg=msg)
+            self.retry(wait=timedelta(hours=24).total_seconds(), msg=msg)
 
     def handle_free(self, pyfile):
         jsvars = dict(re.findall(self.JSVARS_PATTERN, self.data))
@@ -152,12 +151,12 @@ class RapidgatorNet(SimpleDownloader):
         url = "https://rapidgator.net{}".format(
             jsvars.get("captchaUrl", "/download/captcha")
         )
-        self.data = self.load(url, ref=pyfile.url)
+        self.data = self.load(url, referrer=pyfile.url)
 
         m = re.search(self.LINK_FREE_PATTERN, self.data)
         if m is not None:
             # self.link = m.group(1)
-            self.download(m.group(1), ref=url)
+            self.download(m.group(1), referrer=url)
 
         else:
             captcha = self.handle_captcha()
@@ -165,19 +164,23 @@ class RapidgatorNet(SimpleDownloader):
             if not captcha:
                 self.error(self._("Captcha pattern not found"))
 
-            response, challenge = captcha.challenge()
+            if isinstance(captcha, Turnstile):
+                response = captcha.challenge()
+                post_params = {"cf-turnstile-response": response}
 
-            if isinstance(captcha, ReCaptcha):
+            elif isinstance(captcha, ReCaptcha):
+                response = captcha.challenge()
                 post_params = {"g-recaptcha-response": response}
 
             elif isinstance(captcha, SolveMedia):
+                response, challenge = captcha.challenge()
                 post_params = {
                     "adcopy_challenge": challenge,
                     "adcopy_response": response,
                 }
 
             post_params["DownloadCaptchaForm[verifyCode]"] = response
-            self.data = self.load(url, post=post_params, ref=url)
+            self.data = self.load(url, post=post_params, referrer=url)
 
             if "The verification code is incorrect" in self.data:
                 self.retry_captcha()
@@ -186,20 +189,21 @@ class RapidgatorNet(SimpleDownloader):
                 m = re.search(self.LINK_FREE_PATTERN, self.data)
                 if m is not None:
                     # self.link = m.group(1)
-                    self.download(m.group(1), ref=url)
+                    self.download(m.group(1), referrer=url)
 
     def handle_captcha(self):
-        for klass in (ReCaptcha, SolveMedia):
+        for klass in (Turnstile, ReCaptcha, SolveMedia):
             captcha = klass(self.pyfile)
             if captcha.detect_key():
                 self.captcha = captcha
                 return captcha
 
     def get_json_response(self, url):
-        self.req.http.c.setopt(pycurl.HTTPHEADER, ["X-Requested-With: XMLHttpRequest"])
+        self.req.http.set_header("X-Requested-With", "XMLHttpRequest")
 
-        res = self.load(url, ref=self.pyfile.url)
-        self.req.http.c.setopt(pycurl.HTTPHEADER, ["X-Requested-With:"])
+        res = self.load(url, referrer=self.pyfile.url)
+
+        self.req.http.remove_header("X-Requested-With")
 
         if not res.startswith("{"):
             self.retry()

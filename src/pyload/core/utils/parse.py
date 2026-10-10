@@ -1,20 +1,16 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: vuolter
-
-import hashlib
 import os
 import re
 
-from pyload.utils import convert, purge, web
-from pyload.utils.convert import to_str
-from pyload.utils.seconds import to_midnight as seconds_to_midnight
+from . import convert, purge
+from .web import parse as web_parse
+from .seconds import to_midnight as seconds_to_midnight
 
-_RE_ALIAS = re.compile(r"[\d.-_]+")
+# _RE_ALIAS = re.compile(r"[\d.-_]+")
 
 
-def alias(text):
-    chunks = _RE_ALIAS.split(purge.name(text))
-    return "".join(word.capitalize() for word in chunks if word)
+# def alias(text):
+# chunks = _RE_ALIAS.split(purge.name(text))
+# return "".join(word.capitalize() for word in chunks if word)
 
 
 _BOOLMAP = {
@@ -41,28 +37,16 @@ def entries(text, allow_whitespaces=False):
     return [entry for entry in re.split(pattr, text) if entry]
 
 
-def hash(text):
-    text = text.replace("-", "").lower()
-    algop = "|".join(hashlib.algorithms + ("adler32", "crc(32)?"))
-    pattr = rf"(?P<D1>{algop}|)\s*[:=]?\s*(?P<H>[\w^_]{8,}?)\s*[:=]?\s*(?P<D2>{algop}|)"
-    m = re.search(pattr, text)
-    if m is None:
-        return None, None
-
-    checksum = m.group("H")
-    algorithm = m.group("D1") or m.group("D2")
-    if algorithm == "crc":
-        algorithm = "crc32"
-
-    return checksum, algorithm
-
-
-def name(text, strict=True):
+def name(text, safe_name=True):
     try:
-        name = web.parse.name(text)
+        name = web_parse.name(text, safe_name=safe_name)
+        name = os.path.basename(name)
     except Exception:
         name = os.path.basename(text).strip()
-    return name if strict else purge.name(name)
+        if safe_name:
+            name = purge.name(name)
+
+    return name
 
 
 _ONEWORDS = (
@@ -101,10 +85,12 @@ _RE_NUMBER = re.compile(r"[\s-]+")
 
 
 def number(text):
-    try:
-        text = web.misc.translate(text).lower()
-    except Exception:
-        text = text.lower()
+    # try:
+    #     text = web.misc.translate(text).lower()
+    # except Exception:
+    #     text = text.lower()
+    text = text.lower()
+
     o_tuple = [(w, i) for i, w in enumerate(_ONEWORDS)]
     t_tuple = [(w, i * 10) for i, w in enumerate(_TENWORDS, 2)]
 
@@ -123,7 +109,7 @@ def packs(nameurls):
 
     packs = {}
     for urlname, url in nameurls:
-        urlname = name(urlname, strict=False)
+        urlname = name(urlname, safe_name=True)
         urlname = os.path.splitext(urlname)[0].strip()
         urlname = _RE_PACKS.sub("_", urlname).strip("_")
 
@@ -138,38 +124,38 @@ def packs(nameurls):
 _RE_SIZE = re.compile(r"(?P<S>-?[\d.,]+)\s*(?P<U>[a-zA-Z]*)")
 _RE_SIZEFORMAT1 = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?$")
 _RE_SIZEFORMAT2 = re.compile(r"\d+,\d{2}$")
-# _RE_SIZEFORMAT3 = re.compile(r'\d+(?:\.\d+)?$')
+_RE_SIZEFORMAT3 = re.compile(r'\d+(?:\.\d+)?$')
 
 
 def bytesize(text, from_unit=None):  # returns integer bytes
     DEFAULT_UNIT = "byte"
 
-    m = _RE_SIZE.match(to_str(text))
+    m = _RE_SIZE.match(convert.to_str(text))
     if m is None:
         return None
 
-    rawsize = m.group("S")
+    raw_size = m.group("S")
 
-    if re.match(_RE_SIZEFORMAT1, rawsize):
-        rawsize = rawsize.replace(",", "")
+    if re.match(_RE_SIZEFORMAT1, raw_size):
+        raw_size = raw_size.replace(",", "")
 
-    elif re.match(_RE_SIZEFORMAT2, rawsize):
-        rawsize = rawsize.replace(",", ".")
+    elif re.match(_RE_SIZEFORMAT2, raw_size):
+        raw_size = raw_size.replace(",", ".")
 
-    # elif not re.match(_RE_SIZEFORMAT3, rawsize):
-    # return 0  #: Unknown format
+    elif not re.match(_RE_SIZEFORMAT3, raw_size):
+        return 0  #: Unknown format
 
     if from_unit is None:
         from_unit = m.group("U") or DEFAULT_UNIT
 
-    size = float(rawsize)
+    size = float(raw_size)
     unit = from_unit[0].lower()
 
-    return convert.size(size, unit, "byte")
+    return int(convert.size(size, unit, "byte"))
 
 
 _TIMEWORDS = ("this", "a", "an", "next")
-_TIMEMAP = {"day": 60 ** 2 * 12, "hr": 60 ** 2, "hour": 60 ** 2, "min": 60, "sec": 1}
+_TIMEMAP = {"day": 60 ** 2 * 24, "hr": 60 ** 2, "hour": 60 ** 2, "min": 60, "sec": 1}
 _RE_TIME = re.compile(r"(\d+|[a-zA-Z-]+)\s*(day|hr|hour|min|sec)|(\d+)")
 
 
@@ -180,13 +166,14 @@ def seconds(text):
         except ValueError:
             return None
 
-    try:
-        text = web.misc.translate(text).lower()
-    except Exception:
-        text = text.lower()
+    # try:
+    #     text = web.misc.translate(text).lower()
+    # except Exception:
+    #     text = text.lower()
+    text = text.lower()
 
     w = "|".join(_TIMEWORDS)
-    pattr = rf"({w})\s+day|today|daily"
+    pattr = rf"(?:(?:{w})\s+day)|today|daily"
     m = re.search(pattr, text)
     if m is not None:
         return seconds_to_midnight()

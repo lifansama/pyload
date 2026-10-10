@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from ..base.simple_decrypter import SimpleDecrypter
 
 
@@ -8,8 +6,6 @@ class FurLy(SimpleDecrypter):
     __type__ = "decrypter"
     __version__ = "0.06"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://(?:www\.)?fur\.ly/(\d/)?\w+"
     __config__ = [

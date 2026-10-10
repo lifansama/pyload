@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 #
 # Test links:
 # http://fileom.com/gycaytyzdw3g/random.bin.html
@@ -12,8 +10,6 @@ class FileomCom(XFSDownloader):
     __type__ = "downloader"
     __version__ = "0.11"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?fileom\.com/\w{12}"
     __config__ = [

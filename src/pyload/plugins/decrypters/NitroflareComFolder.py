@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import json
 
 from ..base.simple_decrypter import SimpleDecrypter
@@ -11,11 +9,7 @@ class NitroflareComFolder(SimpleDecrypter):
     __version__ = "0.08"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
-    __pattern__ = (
-        r"https?://(?:www\.)?nitroflare\.com/folder/(?P<USER>\d+)/(?P<ID>[\w=]+)"
-    )
+    __pattern__ = r"https?://(?:www\.)?nitroflare\.com/folder/(?P<USER>\d+)/(?P<ID>[\w=]+)"
     __config__ = [
         ("enabled", "bool", "Activated", True),
         ("use_premium", "bool", "Use premium account if available", True),

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from ..base.multi_downloader import MultiDownloader
 
 
@@ -8,8 +6,6 @@ class RehostTo(MultiDownloader):
     __type__ = "downloader"
     __version__ = "0.29"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://.*rehost\.to\..+"
     __config__ = [

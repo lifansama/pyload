@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 import re
 
 from ..base.captcha_service import CaptchaService
@@ -10,8 +8,6 @@ class CoinHive(CaptchaService):
     __type__ = "anticaptcha"
     __version__ = "0.01"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __description__ = "CoinHive captcha service plugin"
     __license__ = "GPLv3"
@@ -99,21 +95,21 @@ class CoinHive(CaptchaService):
         return result
 
 
-if __name__ == "__main__":
-    # Sign with the command `python -m pyload.plugins.captcha.CoinHive
-    # pyload.private.pem pem_passphrase`
-    import sys
-    from ..helpers import sign_string
+# if __name__ == "__main__":
+#     # Sign with the command `python -m pyload.plugins.captcha.CoinHive
+#     # pyload.private.pem pem_passphrase`
+#     import sys
+#     from ..helpers import sign_string
 
-    if len(sys.argv) > 2:
-        with open(sys.argv[1]) as fp:
-            pem_private = fp.read()
+#     if len(sys.argv) > 2:
+#         with open(sys.argv[1]) as fp:
+#             pem_private = fp.read()
 
-        print(
-            sign_string(
-                CoinHive.COINHIVE_INTERACTIVE_JS,
-                pem_private,
-                pem_passphrase=sys.argv[2],
-                sign_algo="SHA384",
-            )
-        )
+#         print(
+#             sign_string(
+#                 CoinHive.COINHIVE_INTERACTIVE_JS,
+#                 pem_private,
+#                 pem_passphrase=sys.argv[2],
+#                 sign_algo="SHA384",
+#             )
+#         )

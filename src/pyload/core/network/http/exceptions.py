@@ -1,5 +1,4 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: vuolter
+import http.client
 
 PROPRIETARY_RESPONSES = {
     440: "Login Timeout - The client's session has expired and must log in again.",
@@ -18,13 +17,21 @@ PROPRIETARY_RESPONSES = {
 }
 
 
-class BadHeader(Exception):
-    def __init__(self, code, header=b"", content=b""):
-        int_code = int(code)
-        response = responses.get(
-            int_code, PROPRIETARY_RESPONSES.get(int_code, "unknown error code")
-        )
+class HTTPError(Exception):
+    """Base exception for HTTP-related errors."""
+    pass
+
+
+class BadHeader(HTTPError):
+    def __init__(self, code, headers, content=""):
+        code = int(code)
+        response = http.client.responses.get(code, PROPRIETARY_RESPONSES.get(code, "unknown error code"))
         super().__init__(f"Bad server response: {code} {response}")
-        self.code = int_code
-        self.header = header
+        self.code = code
+        self.headers = headers
         self.content = content
+
+
+class WrongFormat(HTTPError):
+    """Exception raised when chunk metadata file format is invalid."""
+    pass

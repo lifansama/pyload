@@ -1,37 +1,19 @@
-<!--- Hey, annotations like this one will not be shown in your pull request ticket, so you don't have to delete them, just ignore them all -->
+<!-- ANNOTATIONS LIKE THIS WILL NOT BE VISIBLE IN YOUR TICKET -->
 
-<!--- Don't share your account credentials or other sensitive data here, anyone could read them on GitHub -->
+### Describe the changes
 
-<!--- Thanks for your contributions! -->
+<!-- A clear and concise description of what you've done. -->
 
+<!-- WRITE HERE -->
 
-### Type of request:
-<!--- Please fill with an `x` one of the checkboxes below (eg. `[x] New plugin`) -->
-<!--- Make sure there are no spaces between the brackets you fill -->
+### Is this related to a problem?
 
-- [ ] New plugin
-- [ ] Plugin changes
-- [ ] pyLoad changes
-- [ ] Webui changes
-- [ ] Other
+<!-- A description of the problem you ran into. -->
 
+<!-- WRITE HERE - OPTIONAL -->
 
-### Types of changes:
-<!--- Please fill with an `x` one or more checkboxes below (eg. `[x] Bugfix`) -->
-<!--- Make sure there are no spaces between the brackets you fill -->
+### Additional references
 
-- [ ] Bugfix (non-breaking change which fixes an issue)
-- [ ] New feature (non-breaking change which adds functionality)
-- [ ] Breaking change (fix or feature that would cause existing functionality to change)
+<!-- Any other reference, related issues, pull requests or screenshots about this request. -->
 
-
-### Description:
-<!--- Short description and reasons for applying these changes -->
-
-<!--- WRITE HERE - REQUIRED -->
-
-
-### References:
-<!--- Related pull requests, issues, external links, screenshots, etc. -->
-
-<!--- WRITE HERE - OPTIONAL -->
+<!-- WRITE HERE - OPTIONAL -->

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 
 from ..base.simple_decrypter import SimpleDecrypter
@@ -10,8 +8,6 @@ class CloudzillaToFolder(SimpleDecrypter):
     __type__ = "decrypter"
     __version__ = "0.11"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://(?:www\.)?cloudzilla\.to/share/folder/(?P<ID>[\w^_]+)"
     __config__ = [

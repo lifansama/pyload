@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import json
 
 from ..base.multi_downloader import MultiDownloader
@@ -10,8 +8,6 @@ class ZeveraCom(MultiDownloader):
     __type__ = "downloader"
     __version__ = "0.39"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)zevera\.com/(getFiles\.ashx|Members/download\.ashx)\?.*ourl=.+"
     __config__ = [
@@ -33,7 +29,7 @@ class ZeveraCom(MultiDownloader):
 
     API_URL = "https://www.zevera.com/api/"
 
-    def api_response(self, method, api_key, **kwargs):
+    def api_request(self, method, api_key, **kwargs):
         get_data = {"client_id": "452508742", "apikey": api_key}
 
         get_data.update(kwargs)
@@ -43,8 +39,8 @@ class ZeveraCom(MultiDownloader):
         return json.loads(res)
 
     def handle_premium(self, pyfile):
-        res = self.api_response(
-            "transfer/directdl", self.account.info["login"]["password"], src=pyfile.url
+        res = self.api_request(
+            "transfer/directdl", self.account.get_login("password"), src=pyfile.url
         )
         if res["status"] == "success":
             self.link = res["location"]

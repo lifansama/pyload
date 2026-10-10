@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-
-
 from .Http import Http
 
 
@@ -9,8 +6,6 @@ class DefaultPlugin(Http):
     __type__ = "downloader"
     __version__ = "0.52"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"^unmatchable$"
     __config__ = [("enabled", "bool", "Activated", True)]

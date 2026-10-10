@@ -1,21 +1,19 @@
-# -*- coding: utf-8 -*-
+import locale
 import re
 import time
 import urllib.parse
 
 from pyload.core.utils import parse
 
-from ..helpers import parse_html_form, set_cookie
+from ..helpers import parse_html_form, search_pattern
 from .account import BaseAccount
 
 
 class XFSAccount(BaseAccount):
     __name__ = "XFSAccount"
     __type__ = "account"
-    __version__ = "0.59"
+    __version__ = "0.67"
     __status__ = "stable"
-
-    __pyload_version__ = "0.5"
 
     __config__ = [
         ("enabled", "bool", "Activated", True),
@@ -40,7 +38,8 @@ class XFSAccount(BaseAccount):
 
     PREMIUM_PATTERN = r"\(Premium only\)"
 
-    VALID_UNTIL_PATTERN = r"Premium.[Aa]ccount expire:.*?(\d{1,2} [\w^_]+ \d{4})"
+    VALID_UNTIL_PATTERN = r"Premium.[Aa]ccount expires?:.*?(\d{1,2} [\w^_]+ \d{4})"
+    VALID_UNTIL_FORMAT = r"%d %B %Y"
 
     TRAFFIC_LEFT_PATTERN = r"Traffic available today:.*?<b>\s*(?P<S>[\d.,]+|[Uu]nlimited)\s*(?:(?P<U>[\w^_]+)\s*)?</b>"
     TRAFFIC_LEFT_UNIT = "MiB"  #: Used only if no group <U> was found
@@ -57,7 +56,7 @@ class XFSAccount(BaseAccount):
         if isinstance(self.COOKIES, list) and cookie not in self.COOKIES:
             self.COOKIES.insert(cookie)
         else:
-            set_cookie(self.req.cj, *cookie)
+            self.req.cj.set_cookie(*cookie)
 
     def setup(self):
         if not self.PLUGIN_DOMAIN:
@@ -80,7 +79,6 @@ class XFSAccount(BaseAccount):
         validuntil = None
         trafficleft = None
         leechtraffic = None
-        premium = None
 
         if not self.PLUGIN_URL:  # TODO: Remove in 0.6.x
             return
@@ -89,15 +87,17 @@ class XFSAccount(BaseAccount):
             self.PLUGIN_URL, get={"op": "my_account"}, cookies=self.COOKIES
         )
 
-        premium = re.search(self.PREMIUM_PATTERN, self.data) is not None
+        premium = True if search_pattern(self.PREMIUM_PATTERN, self.data) is not None else False
 
-        m = re.search(self.VALID_UNTIL_PATTERN, self.data)
+        m = search_pattern(self.VALID_UNTIL_PATTERN, self.data)
         if m is not None:
             expiredate = m.group(1).strip()
             self.log_debug("Expire date: " + expiredate)
 
+            previous_locale = locale.getlocale(locale.LC_TIME)
             try:
-                validuntil = time.mktime(time.strptime(expiredate, "%d %B %Y"))
+                locale.setlocale(locale.LC_TIME, "en_US.UTF-8")
+                validuntil = time.mktime(time.strptime(expiredate, self.VALID_UNTIL_FORMAT))
 
             except Exception as exc:
                 self.log_error(exc)
@@ -111,10 +111,14 @@ class XFSAccount(BaseAccount):
                 else:
                     premium = False
                     validuntil = None  #: Registered account type (not premium)
+
+            finally:
+                locale.setlocale(locale.LC_TIME, previous_locale)
+
         else:
             self.log_debug("VALID UNTIL PATTERN not found")
 
-        m = re.search(self.TRAFFIC_LEFT_PATTERN, self.data)
+        m = search_pattern(self.TRAFFIC_LEFT_PATTERN, self.data)
         if m is not None:
             try:
                 traffic = m.groupdict()
@@ -135,7 +139,7 @@ class XFSAccount(BaseAccount):
                     else:
                         unit = ""
 
-                    trafficleft = self.parse_traffic(size + unit)
+                    trafficleft = max(0, self.parse_traffic(size, unit))
 
             except Exception as exc:
                 self.log_error(exc)
@@ -181,7 +185,7 @@ class XFSAccount(BaseAccount):
     def signin(self, user, password, data):
         self.data = self.load(self.LOGIN_URL, cookies=self.COOKIES)
 
-        if re.search(self.LOGIN_SKIP_PATTERN, self.data):
+        if search_pattern(self.LOGIN_SKIP_PATTERN, self.data):
             self.skip_login()
 
         action, inputs = parse_html_form('name="FL"', self.data)
@@ -191,7 +195,7 @@ class XFSAccount(BaseAccount):
         inputs.update({"login": user, "password": password})
 
         if action:
-            url = urllib.parse.urljoin("http://", action)
+            url = urllib.parse.urljoin(self.LOGIN_URL, action)
         else:
             url = self.LOGIN_URL
 
@@ -199,14 +203,16 @@ class XFSAccount(BaseAccount):
 
         self.check_errors()
 
-    def check_errors(self):
+    def check_errors(self, data=None):
         self.log_info(self._("Checking for link errors..."))
 
-        if not self.data:
+        data = data or self.data
+
+        if not data:
             self.log_warning(self._("No data to check"))
             return
 
-        m = re.search(self.LOGIN_BAN_PATTERN, self.data)
+        m = search_pattern(self.LOGIN_BAN_PATTERN, data)
         if m is not None:
             try:
                 errmsg = m.group(1)
@@ -223,7 +229,7 @@ class XFSAccount(BaseAccount):
 
             self.fail_login(errmsg)
 
-        m = re.search(self.LOGIN_FAIL_PATTERN, self.data)
+        m = search_pattern(self.LOGIN_FAIL_PATTERN, data)
         if m is not None:
             try:
                 errmsg = m.group(1)

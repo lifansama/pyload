@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import re
 
 from ..anticaptchas.SolveMedia import SolveMedia
@@ -15,8 +14,6 @@ class LoadTo(SimpleDownloader):
     __type__ = "downloader"
     __version__ = "0.29"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://(?:www\.)?load\.to/\w+"
     __config__ = [

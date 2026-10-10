@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import datetime
 from datetime import timedelta
 
@@ -14,8 +12,6 @@ class LogMarker(BaseAddon):
     __version__ = "0.08"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
     __config__ = [
         ("enabled", "bool", "Activated", False),
         ("mark_hour", "bool", "Mark hours", True),
@@ -28,7 +24,7 @@ class LogMarker(BaseAddon):
 
     def activated(self):
         self.periodical.start(
-            timedelta(hours=1).seconds - 1, delay=seconds.to_nexthour(strict=True) - 1
+            timedelta(hours=1).total_seconds() - 1, delay=seconds.to_nexthour(strict=True) - 1
         )
 
     def periodical_task(self):

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import json
 
 from ..base.simple_decrypter import SimpleDecrypter
@@ -10,8 +8,6 @@ class TurbobitNetFolder(SimpleDecrypter):
     __type__ = "decrypter"
     __version__ = "0.11"
     __status__ = "broken"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://(?:www\.)?turbobit\.net/download/folder/(?P<ID>\w+)"
     __config__ = [

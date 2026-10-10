@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import json
 import re
 
@@ -13,8 +11,6 @@ class ImgurCom(SimpleDecrypter):
     __type__ = "decrypter"
     __version__ = "0.61"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.|m\.)?imgur\.com/(a|gallery|)/?\w{5,7}"
     __config__ = [

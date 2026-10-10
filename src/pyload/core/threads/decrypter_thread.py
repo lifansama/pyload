@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: RaNaN, vuolter
-
-
 from ..network.exceptions import Abort, Fail, Retry
 from .plugin_thread import PluginThread
 

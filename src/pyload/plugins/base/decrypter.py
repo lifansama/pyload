@@ -1,8 +1,4 @@
-# -*- coding: utf-8 -*-
-
-
-from pyload.core.utils import parse
-from pyload.core.utils.old import safename
+from pyload.core.utils import fs, parse
 
 from .hoster import BaseHoster
 
@@ -10,10 +6,8 @@ from .hoster import BaseHoster
 class BaseDecrypter(BaseHoster):
     __name__ = "BaseDecrypter"
     __type__ = "decrypter"
-    __version__ = "0.20"
+    __version__ = "0.22"
     __status__ = "stable"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"^unmatchable$"
     __config__ = [
@@ -61,16 +55,16 @@ class BaseDecrypter(BaseHoster):
         """
         Generate new packages from self.links.
         """
+        links = [self.fixurl(url) for url in self.links]
         name = self.info["pattern"].get("N")
         if name is None:
-            links = [self.fixurl(url) for url in self.links]
             pdict = self.pyload.api.generate_packages(links)
             packages = [
                 (name, links, parse.name(name)) for name, links in pdict.items()
             ]
 
         else:
-            packages = [(name, self.links, parse.name(name))]
+            packages = [(name, links, parse.name(name))]
 
         self.packages.extend(packages)
 
@@ -106,7 +100,7 @@ class BaseDecrypter(BaseHoster):
             #: Workaround to do not break API add_package method
             def set_folder(x):
                 return self.pyload.api.set_package_data(
-                    pid, {"folder": safename(x or "")}
+                    pid, {"_folder": fs.safename(x or "")}
                 )
 
             if not folder_per_package:

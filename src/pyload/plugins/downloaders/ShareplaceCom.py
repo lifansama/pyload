@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 import urllib.parse
 
@@ -11,8 +9,6 @@ class ShareplaceCom(SimpleDownloader):
     __type__ = "downloader"
     __version__ = "0.19"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://(?:www\.)?shareplace\.(com|org)/\?\w+"
     __config__ = [("enabled", "bool", "Activated", True)]

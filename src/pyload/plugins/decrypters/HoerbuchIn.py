@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import re
 
 from bs4 import BeautifulSoup
@@ -9,12 +8,10 @@ from ..base.decrypter import BaseDecrypter
 class HoerbuchIn(BaseDecrypter):
     __name__ = "HoerbuchIn"
     __type__ = "decrypter"
-    __version__ = "0.67"
+    __version__ = "0.68"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
-    __pattern__ = r"http://(?:www\.)?hoerbuch\.us/(wp/horbucher/\d+/|tp/out\.php\?.+|protection/folder_\d+\.html)"
+    __pattern__ = r"https?://(?:www\.)?hoerbuch\.us/(wp/horbucher/\d+/|tp/out\.php\?.+|protection/folder_\d+\.html)"
     __config__ = [
         ("enabled", "bool", "Activated", True),
         ("use_premium", "bool", "Use premium account if available", True),
@@ -30,12 +27,12 @@ class HoerbuchIn(BaseDecrypter):
     __license__ = "GPLv3"
     __authors__ = [("spoob", "spoob@pyload.net"), ("mkaay", "mkaay@mkaay.de")]
 
-    article = re.compile(r"http://(?:www\.)?hoerbuch\.us/wp/horbucher/\d+/.+/")
-    protection = re.compile(r"http://(?:www\.)?hoerbuch\.us/protection/folder_\d+.html")
+    article = re.compile(r"https?://(?:www\.)?hoerbuch\.us/wp/horbucher/\d+/.+/")
+    protection = re.compile(r"https?://(?:www\.)?hoerbuch\.us/protection/folder_\d+.html")
     uploaded = re.compile(
-        r"http://(?:www\.)?hoerbuch\.us/protection/uploaded/(\w+)\.html"
+        r"https?://(?:www\.)?hoerbuch\.us/protection/uploaded/(\w+)\.html"
     )
-    hoster_links = re.compile(r"http://(?:www\.)?hoerbuch\.us/wp/goto/Download/\d+/")
+    hoster_links = re.compile(r"https?://(?:www\.)?hoerbuch\.us/wp/goto/Download/\d+/")
 
     def decrypt(self, pyfile):
         self.pyfile = pyfile
@@ -43,7 +40,7 @@ class HoerbuchIn(BaseDecrypter):
         if self.article.match(pyfile.url):
             html = self.load(pyfile.url)
             soup = BeautifulSoup(
-                html, convertEntities=BeautifulSoup.BeautifulStoneSoup.HTML_ENTITIES
+                html, 'html.parser'
             )
 
             links = []
@@ -74,7 +71,7 @@ class HoerbuchIn(BaseDecrypter):
         links = []
 
         soup = BeautifulSoup(
-            html, convertEntities=BeautifulSoup.BeautifulStoneSoup.HTML_ENTITIES
+            html, 'html.parser'
         )
 
         for container in soup.findAll("div", attrs={"class": "container"}):

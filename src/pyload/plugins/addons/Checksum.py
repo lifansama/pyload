@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import hashlib
 import os
 import re
@@ -26,7 +25,7 @@ def compute_checksum(local_file, algorithm, progress_notify=None, abort=None):
             h = getattr(hashlib, algorithm)()
 
             with open(local_file, mode="rb") as fp:
-                for chunk in iter(lambda: fp.read(128 * h.block_size), ""):
+                for chunk in iter(lambda: fp.read(128 * h.block_size), b""):
                     if abort and abort():
                         return False
 
@@ -67,10 +66,8 @@ def compute_checksum(local_file, algorithm, progress_notify=None, abort=None):
 class Checksum(BaseAddon):
     __name__ = "Checksum"
     __type__ = "addon"
-    __version__ = "0.34"
+    __version__ = "0.36"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __config__ = [
         ("enabled", "bool", "Activated", False),
@@ -129,7 +126,7 @@ class Checksum(BaseAddon):
     def download_finished(self, pyfile):
         """
         Compute checksum for the downloaded file and compare it with the hash provided
-        by the hoster.
+        by the downloader.
 
         pyfile.plugin.check_data should be a dictionary which can
         contain: a) if known, the exact filesize in bytes (e.g. 'size':
@@ -148,7 +145,7 @@ class Checksum(BaseAddon):
 
         elif hasattr(pyfile.plugin, "info") and isinstance(pyfile.plugin.info, dict):
             data = pyfile.plugin.info.copy()
-            # NOTE: Don't check file size until a similary matcher will be implemented
+            # NOTE: Don't check file size until a similarity matcher will be implemented
             data.pop("size", None)
 
         else:
@@ -160,8 +157,6 @@ class Checksum(BaseAddon):
             self.check_failed(pyfile, None, "No file downloaded")
 
         local_file = os.fsdecode(pyfile.plugin.last_download)
-        # dl_folder  = self.pyload.config.get("general", "storage_folder")
-        # local_file = encode(os.path.join(dl_folder, pyfile.package().folder, pyfile.name))
 
         if not os.path.isfile(local_file):
             self.check_failed(pyfile, None, "File does not exist")
@@ -181,13 +176,12 @@ class Checksum(BaseAddon):
 
             data.pop("size", None)
 
-        self.log_debug(data)
         #: Validate checksum
         if data and self.config.get("check_checksum"):
             data["hash"] = data.get("hash", {})
 
             for key in self.algorithms:
-                if key in data and key not in data["hash"]:
+                if data.get(key) and key not in data["hash"]:
                     data["hash"][key] = data[key]
                     break
 
@@ -405,8 +399,8 @@ class Checksum(BaseAddon):
                         time.sleep(wait_time)
 
                         pyfile.package().set_finished = (
-                            False
-                        )  #: Force `package_finished` event again
+                            False  #: Force `package_finished` event again
+                        )
                         self.pyload.files.restart_file(fid)
                         continue
 

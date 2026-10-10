@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import json
 
 from ..base.simple_downloader import SimpleDownloader
@@ -8,12 +6,10 @@ from ..base.simple_downloader import SimpleDownloader
 class IronfilesNet(SimpleDownloader):
     __name__ = "IronfilesNet"
     __type__ = "downloader"
-    __version__ = "0.01"
+    __version__ = "0.02"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
-    __pattern__ = r"https?://ironfiles\.net/file/download/id/(?P<ID>\d+)(?:/key/(?P<KEY>65a2bfa38c2c1899))?"
+    __pattern__ = r"https?://ironfiles\.net/file/download/id/(?P<ID>\d+)(?:/key/(?P<KEY>[-\w]+))?"
     __config__ = [
         ("enabled", "bool", "Activated", True),
         ("use_premium", "bool", "Use premium account if available", True),
@@ -24,7 +20,7 @@ class IronfilesNet(SimpleDownloader):
 
     __description__ = """Ironfiles.net downloader plugin"""
     __license__ = "GPLv3"
-    __authors__ = [("GammaC0de", "nitzo2001[AT]yahoo[DOT]com")]
+    __authors__ = [("GammaC0de", "nitzo2001[AT]yahoo[DOT]com"), ("djraw", None)]
 
     LOGIN_PREMIUM = True
 
@@ -32,7 +28,7 @@ class IronfilesNet(SimpleDownloader):
 
     API_URL = "https://ironfiles.net/api/"
 
-    def api_response(self, method, **kwargs):
+    def api_request(self, method, **kwargs):
         json_data = self.load(self.API_URL + method, get=kwargs)
         return json.loads(json_data)
 

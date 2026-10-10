@@ -1,15 +1,11 @@
-# -*- coding: utf-8 -*-
-
 from ..base.xfs_downloader import XFSDownloader
 
 
 class EasybytezCom(XFSDownloader):
     __name__ = "EasybytezCom"
     __type__ = "downloader"
-    __version__ = "0.30"
+    __version__ = "0.32"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://(?:www\.)?easybytez\.com/\w{12}"
     __config__ = [
@@ -28,5 +24,7 @@ class EasybytezCom(XFSDownloader):
     ]
 
     PLUGIN_DOMAIN = "easybytez.com"
+
     OFFLINE_PATTERN = r">File not available"
+
     LINK_PATTERN = r'(http://(\w+\.(easybytez|easyload|ezbytez|ezybytez|zingload)\.(com|to)|\d+\.\d+\.\d+\.\d+)/files/\d+/\w+/.+?)["\'<]'

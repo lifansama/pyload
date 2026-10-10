@@ -1,22 +1,21 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: vuolter
-
 import datetime
-import logging  # test
+import mimetypes
 import operator
 import os
+import re
 import sys
 import time
+from logging import getLogger
 from urllib.parse import unquote
 
 import flask
 
-from pyload import PKGDIR
-from pyload.core.utils import format
+from pyload import APPID, PKGDIR
+from pyload.core.utils import format, fs
 
-from ..filters import unquotepath
 from ..helpers import (
     clear_session,
+    get_client_ip,
     get_permission,
     get_redirect_url,
     is_authenticated,
@@ -24,12 +23,14 @@ from ..helpers import (
     permlist,
     render_base,
     render_template,
-    set_permission,
     set_session,
     static_file_url,
 )
 
+_RE_LOGLINE = re.compile(r"\[([\d\-]+) ([\d:]+)\] +([A-Z]+) +(.+?) (.*)")
+
 bp = flask.Blueprint("app", __name__)
+log = getLogger(APPID)
 
 
 @bp.route("/favicon.ico", endpoint="favicon")
@@ -38,14 +39,46 @@ def favicon():
     return flask.redirect(location)
 
 
-@bp.route("/render/<path:filename>", endpoint="render")
+@bp.route("/web/<path:filename>", endpoint="web")
 def render(filename):
-    return render_template(f"{filename}")
+    # Allow login.html without authentication, protect all other files
+    if filename != "login.html" and not is_authenticated():
+        location = flask.url_for("app.login", next="index")
+        return flask.redirect(location)
+
+    mimetype = mimetypes.guess_type(filename)[0] or "text/html"
+    data = render_template(filename)
+    return flask.Response(data, mimetype=mimetype)
 
 
 @bp.route("/robots.txt", endpoint="robots")
 def robots():
-    return "User-agent: *\n_disallow: /"
+    return "User-agent: *\nDisallow: /"
+
+
+@bp.route("/manifest.json", endpoint="manifest")
+def manifest():
+    return flask.jsonify({
+        "name": "pyLoad",
+        "short_name": "pyLoad",
+        "start_url": flask.url_for("app.dashboard"),
+        "display": "standalone",
+        "scope": "/",
+        "background_color": "#ffffff",
+        "theme_color": "#007bff",
+        "icons": [
+            {
+                "src": static_file_url("img/favicon.ico"),
+                "sizes": "64x64 128x128 256x256",
+                "type": "image/x-icon"
+            }
+        ]
+    })
+
+
+@bp.route("/qr-redirector", endpoint="qr_redirector")
+def qr_redirector():
+    return flask.send_from_directory("static", "qr-redirector.html")
 
 
 # TODO: Rewrite login route using flask-login
@@ -53,55 +86,64 @@ def robots():
 def login():
     api = flask.current_app.config["PYLOAD_API"]
 
-    next = get_redirect_url(fallback=flask.url_for("app.dashboard"))
+    next_url = get_redirect_url(fallback="app.dashboard")
 
     if flask.request.method == "POST":
         user = flask.request.form["username"]
         password = flask.request.form["password"]
         user_info = api.check_auth(user, password)
 
+        client_ip = get_client_ip()
+
+        sanitized_user = user.replace("\n", "\\n").replace("\r", "\\r")
         if not user_info:
-            return render_template("login.html", next=next, errors=True)
+            log.error(f"Login failed for user '{sanitized_user}' using Web Client [CLIENT: {client_ip}]")
+            return render_template("login.html", errors=True)
 
         set_session(user_info)
+        flask.current_app.session_interface.regenerate(flask.session)
+        log.info(f"User '{sanitized_user}' successfully logged in using Web Client [CLIENT: {client_ip}]")
         flask.flash("Logged in successfully")
 
     if is_authenticated():
-        return flask.redirect(next)
+        return flask.redirect(next_url)
 
     if api.get_config_value("webui", "autologin"):
         allusers = api.get_all_userdata()
         if len(allusers) == 1:  # TODO: check if localhost
-            user_info = list(allusers.values())[0]
-            set_session(user_info)
-            # NOTE: Double-check autentication here because if session[name] is empty,
+            userdata = list(allusers.values())[0]
+            set_session(userdata.model_dump())
+            # NOTE: Double-check authentication here because if session[name] is empty,
             #       next login_required redirects here again and all loop out.
             if is_authenticated():
-                return flask.redirect(next)
+                return flask.redirect(next_url)
 
-    return render_template("login.html", next=next)
+    return render_template("login.html")
 
 
 @bp.route("/logout", endpoint="logout")
 def logout():
-    # logout_user()
-    clear_session()
+    s = flask.session
+    user = s.get("name")
+    clear_session(s)
+    if user:
+        log.info(f"User '{user}' logged out")
     return render_template("logout.html")
 
 
 @bp.route("/", endpoint="index")
 @bp.route("/home", endpoint="home")
 @bp.route("/dashboard", endpoint="dashboard")
-@login_required("ALL")
+@login_required("LIST")
 def dashboard():
     api = flask.current_app.config["PYLOAD_API"]
     links = api.status_downloads()
 
     for link in links:
-        if link["status"] == 12:
-            current_size = link["size"] - link["bleft"]
-            formatted_speed = format.speed(link["speed"])
-            link["info"] = f"{current_size} KiB @ {formatted_speed}"
+        if link.status == 12:
+            current_size = link.size - link.bleft
+            formatted_speed = format.speed(link.speed)
+            link.info = f"{current_size} KiB @ {formatted_speed}"
 
     return render_template("dashboard.html", res=links)
 
@@ -111,7 +153,7 @@ def dashboard():
 def queue():
     api = flask.current_app.config["PYLOAD_API"]
     queue = api.get_queue()
-    queue.sort(key=operator.attrgetter("order"))
+    queue.sort(key=lambda x: x.order)
 
     return render_template("packages.html", content=queue, target=1)
 
@@ -121,8 +163,7 @@ def queue():
 def collector():
     api = flask.current_app.config["PYLOAD_API"]
     queue = api.get_collector()
-
-    queue.sort(key=operator.attrgetter("order"))
+    queue.sort(key=lambda x: x.order)
 
     return render_template("packages.html", content=queue, target=0)
 
@@ -130,41 +171,66 @@ def collector():
 @bp.route("/files", endpoint="files")
 @login_required("DOWNLOAD")
 def files():
+    def decode_name(filename):
+        try:
+            return filename.decode("utf-8")
+        except UnicodeDecodeError:
+            return filename.decode("iso-8859-1")
+
     api = flask.current_app.config["PYLOAD_API"]
-    root = api.get_config_value("general", "storage_folder")
+    root = os.fsencode(api.get_config_value("general", "storage_folder"))
 
     if not os.path.isdir(root):
         messages = ["Download directory not found."]
         return render_base(messages)
     data = {"folder": [], "files": []}
 
-    for entry in sorted(os.listdir(root)):
-        if os.path.isdir(os.path.join(root, entry)):
-            folder = {"name": entry, "path": entry, "files": []}
-            files = os.listdir(os.path.join(root, entry))
-            for file in sorted(files):
-                try:
-                    if os.path.isfile(os.path.join(root, entry, file)):
-                        folder["files"].append(file)
-                except Exception:
-                    pass
+    try:
+        for entry in sorted(os.listdir(root)):
+            try:
+                if os.path.isdir(os.path.join(root, entry)):
+                    folder = {"name": decode_name(entry), "path": decode_name(entry), "files": []}
+                    try:
+                        files = os.listdir(os.path.join(root, entry))
+                        for file in sorted(files):
+                            if os.path.isfile(os.path.join(root, entry, file)):
+                                folder["files"].append(decode_name(file))
 
-            data["folder"].append(folder)
+                    except OSError as exc:
+                        log.debug("Failed to list files in folder '%s': %s", decode_name(entry), exc)
 
-        elif os.path.isfile(os.path.join(root, entry)):
-            data["files"].append(entry)
+                    data["folder"].append(folder)
+
+                elif os.path.isfile(os.path.join(root, entry)):
+                    data["files"].append(decode_name(entry))
+
+            except OSError as exc:
+                log.debug("Failed to access entry '%s': %s", decode_name(entry), exc)
+
+    except OSError as exc:
+        log.debug("Failed to list download directory '{}': {}".format(os.fsdecode(root), exc))
 
     return render_template("files.html", files=data)
 
 
-@bp.route("/files/get/<filename>", endpoint="get_file")
+@bp.route("/files/get/<path:path>", endpoint="get_file")
 @login_required("DOWNLOAD")
-def get_file(filename):
+def get_file(path):
     api = flask.current_app.config["PYLOAD_API"]
-    filename = unquote(filename).replace("..", "")
-    directory = api.get_config_value("general", "storage_folder")
-    return flask.send_from_directory(directory, filename, as_attachment=True)
+    try:
+        storage_folder = api.get_config_value("general", "storage_folder")
+        full_path = fs.safejoin(*[storage_folder] + unquote(path).split("/"))
+        if not os.path.isfile(full_path):
+            flask.abort(404)
 
+        return flask.send_file(
+            full_path,
+            as_attachment=True,
+            download_name=os.path.basename(full_path)
+        )
+    except ValueError:
+        log.warning(f"Path traversal attempt blocked: {path}")
+        flask.abort(403)
 
 @bp.route("/settings", endpoint="settings")
 @login_required("SETTINGS")
@@ -184,33 +250,35 @@ def settings():
 
     accs = []
 
-    for data in api.get_accounts(False):
-        if data.trafficleft == -1:
-            trafficleft = "unlimited"
-        elif not data.trafficleft:
+    for userdata in api.get_accounts(False):
+        if userdata.trafficleft is None:
             trafficleft = "not available"
+        elif userdata.trafficleft == -1:
+            trafficleft = "unlimited"
+        elif userdata.trafficleft == 0:
+            trafficleft = "drained"
         else:
-            trafficleft = format.size(data.trafficleft << 10)
+            trafficleft = format.size(userdata.trafficleft)
 
-        if data.validuntil == -1:
+        if userdata.validuntil == -1:
             validuntil = "unlimited"
-        elif not data.validuntil:
+        elif not userdata.validuntil:
             validuntil = "not available"
         else:
-            t = time.localtime(data.validuntil)
-            validuntil = time.strftime("%Y-%m-%d %H:%M:%S", t)
+            t = time.localtime(userdata.validuntil)
+            validuntil = time.strftime("%d.%m.%Y", t)
 
-        if "time" in data.options:
+        if "time" in userdata.options:
             try:
-                _time = data.options["time"][0]
+                _time = userdata.options["time"][0]
             except Exception:
                 _time = ""
         else:
             _time = ""
 
-        if "limit_dl" in data.options:
+        if "limit_dl" in userdata.options:
             try:
-                limitdl = data.options["limit_dl"][0]
+                limitdl = userdata.options["limit_dl"][0]
             except Exception:
                 limitdl = "0"
         else:
@@ -218,10 +286,10 @@ def settings():
 
         accs.append(
             {
-                "type": data.type,
-                "login": data.login,
-                "valid": data.valid,
-                "premium": data.premium,
+                "type": userdata.type,
+                "login": userdata.login,
+                "valid": userdata.valid,
+                "premium": userdata.premium,
                 "trafficleft": trafficleft,
                 "validuntil": validuntil,
                 "limitdl": limitdl,
@@ -229,19 +297,32 @@ def settings():
             }
         )
 
+    all_users = api.get_all_userdata()
+    users = {}
+    for userdata in all_users.values():
+        name = userdata.name
+        users[name] = {"perms": get_permission(userdata.permission)}
+        users[name]["perms"]["admin"] = userdata.role == 0
+
+    admin_menu = {
+        "permlist": permlist(),
+        "users": users
+    }
+
     context = {
-        "conf": {"plugin": plugin_menu, "general": conf_menu, "accs": accs},
+        "conf": {"plugin": plugin_menu, "general": conf_menu, "accs": accs, "admin": admin_menu},
         "types": api.get_account_types(),
+        "path_prefix": api.get_config_value("webui", "prefix"),
     }
     return render_template("settings.html", **context)
 
 
-@bp.route("/pathchooser", endpoint="pathchooser")
-@bp.route("/pathchooser/<path:path>", endpoint="pathchooser")
-@login_required("STATUS")
-def pathchooser(path):
-    browse_for = "folder" if os.path.isdir(path) else "file"
-    path = os.path.normpath(unquotepath(path))
+@bp.route("/pathchooser/", endpoint="pathchooser")
+@bp.route("/filechooser/", endpoint="filechooser")
+@login_required("SETTINGS")
+def pathchooser():
+    browse_for = "folder" if flask.request.endpoint == "app.pathchooser" else "file"
+    path = os.path.normpath(flask.request.args.get('path', ""))
 
     if os.path.isfile(path):
         oldfile = path
@@ -266,8 +347,8 @@ def pathchooser(path):
         if os.path.realpath(cwd) == os.path.realpath("/"):
             cwd = os.path.relpath(cwd)
         else:
-            cwd = os.path.relpath(cwd) + os.path.os.sep
-        parentdir = os.path.relpath(parentdir) + os.path.os.sep
+            cwd = os.path.relpath(cwd) + os.path.sep
+        parentdir = os.path.relpath(parentdir) + os.path.sep
 
     if os.path.realpath(cwd) == os.path.realpath("/"):
         parentdir = ""
@@ -290,12 +371,8 @@ def pathchooser(path):
         except Exception:
             continue
 
-        if os.path.isdir(os.path.join(cwd, f)):
-            data["type"] = "dir"
-        else:
-            data["type"] = "file"
-
         if os.path.isfile(os.path.join(cwd, f)):
+            data["type"] = "file"
             data["size"] = os.path.getsize(os.path.join(cwd, f))
 
             power = 0
@@ -305,6 +382,7 @@ def pathchooser(path):
             units = ("", "K", "M", "G", "T")
             data["unit"] = units[power] + "Byte"
         else:
+            data["type"] = "dir"
             data["size"] = ""
 
         files.append(data)
@@ -323,13 +401,13 @@ def pathchooser(path):
 
 
 @bp.route("/logs", methods=["GET", "POST"], endpoint="logs")
-@bp.route("/logs/<int:page>", methods=["GET", "POST"], endpoint="logs")
+@bp.route("/logs/<int:start_line>", methods=["GET", "POST"], endpoint="logs")
 @login_required("LOGS")
-def logs(page=-1):
+def logs(start_line=-1):
     s = flask.session
     api = flask.current_app.config["PYLOAD_API"]
 
-    perpage = s.get("perpage", 34)
+    per_page = s.get("perpage", 34)
     reversed = s.get("reversed", False)
 
     warning = ""
@@ -337,7 +415,7 @@ def logs(page=-1):
     if not conf:
         warning = "Warning: File log is disabled, see settings page."
 
-    perpage_p = ((20, 20), (34, 34), (40, 40), (100, 100), (0, "all"))
+    per_page_selection = ((20, 20), (34, 34), (40, 40), (100, 100), (0, "all"))
     fro = None
 
     if flask.request.method == "POST":
@@ -347,61 +425,62 @@ def logs(page=-1):
         except Exception:
             pass
 
-        perpage = int(flask.request.form["perpage"])
-        s["perpage"] = perpage
+        per_page = int(flask.request.form.get("perpage", 34))
+        s["perpage"] = per_page
 
-        reversed = bool(flask.request.form["reversed"])
+        reversed = bool(flask.request.form.get("reversed", False))
         s["reversed"] = reversed
 
         # s.modified = True
 
-    log = api.get_log()
-    if not perpage:
-        page = 0
+    log_entries = api.get_log()
+    if not per_page:
+        start_line = 0
 
-    if page < 1 or not isinstance(page, int):
-        page = (
-            1 if len(log) - perpage + 1 < 1 or perpage == 0 else len(log) - perpage + 1
+    if start_line < 1:
+        start_line = (
+            1 if len(log_entries) - per_page + 1 < 1 or per_page == 0 else len(log_entries) - per_page + 1
         )
 
     if isinstance(fro, datetime.datetime):  #: we will search for datetime.datetime
-        page = -1
+        start_line = -1
 
     data = []
-    counter = 0
-    perpagecheck = 0
-    for l in log:
-        counter += 1
-
-        if counter >= page:
+    inpage_counter = 0
+    for counter, logline in enumerate(log_entries, start=1):
+        if counter >= start_line:
             try:
-                date, time, level, message = l.split(" ", 3)
+                date, time, level, source, message = _RE_LOGLINE.match(logline).groups()
                 dtime = datetime.datetime.strptime(
                     date + " " + time, "%Y-%m-%d %H:%M:%S"
                 )
-            except Exception:
+                message = message.strip()
+            except (AttributeError, IndexError):
                 dtime = None
                 date = "?"
                 time = " "
                 level = "?"
-                message = l
-            if page == -1 and dtime is not None and fro <= dtime:
-                page = counter  #: found our datetime.datetime
-            if page >= 0:
+                source = "?"
+                message = logline
+            if start_line == -1 and dtime is not None and fro <= dtime:
+                start_line = counter  #: found our datetime.datetime
+
+            if start_line >= 0:
                 data.append(
                     {
                         "line": counter,
                         "date": date + " " + time,
                         "level": level,
-                        "message": message,
+                        "source": source,
+                        "message": message.rstrip('\n'),
                     }
                 )
-                perpagecheck += 1
+                inpage_counter += 1
                 if (
                     fro is None and dtime is not None
-                ):  #: if fro not set set it to first showed line
+                ):  #: if fro not set, set it to first showed line
                     fro = dtime
-            if perpagecheck >= perpage > 0:
+            if inpage_counter >= per_page > 0:
                 break
 
     if fro is None:  #: still not set, empty log?
@@ -415,52 +494,12 @@ def logs(page=-1):
         "log": data,
         "from": fro.strftime("%Y-%m-%d %H:%M:%S"),
         "reversed": reversed,
-        "perpage": perpage,
-        "perpage_p": sorted(perpage_p),
-        "iprev": 1 if page - perpage < 1 else page - perpage,
-        "inext": (page + perpage) if page + perpage < len(log) else page,
+        "perpage": per_page,
+        "perpage_p": sorted(per_page_selection),
+        "iprev": max(start_line - per_page, 1),
+        "inext": (start_line + per_page) if start_line + per_page <= len(log_entries) else start_line,
     }
     return render_template("logs.html", **context)
-
-
-@bp.route("/admin", methods=["GET", "POST"], endpoint="admin")
-@login_required("ADMIN")
-def admin():
-    api = flask.current_app.config["PYLOAD_API"]
-
-    allusers = api.get_all_userdata()
-
-    perms = permlist()
-    users = {}
-
-    # NOTE: messy code... users just need "perms" data in admin template
-    for data in allusers.values():
-        name = data["name"]
-        users[name] = {"perms": get_permission(data["permission"])}
-        users[name]["perms"]["admin"] = data["role"] == 0
-
-    s = flask.session
-    if flask.request.method == "POST":
-        for name, data in users.items():
-            if flask.request.form.get(f"{name}|admin"):
-                data["role"] = 0
-                data["perms"]["admin"] = True
-            elif name != s["name"]:
-                data["role"] = 1
-                data["perms"]["admin"] = False
-
-            # set all perms to false
-            for perm in perms:
-                data["perms"][perm] = False
-
-            for perm in flask.request.form.getlist(f"{name}|perms"):
-                data["perms"][perm] = True
-
-            data["permission"] = set_permission(data["perms"])
-
-            api.set_user_permission(name, data["permission"], data["role"])
-
-    return render_template("admin.html", users=users, permlist=perms)
 
 
 @bp.route("/filemanager", endpoint="filemanager")
@@ -481,7 +520,7 @@ def info():
         "os": " ".join((os.name, sys.platform) + extra),
         "version": api.get_server_version(),
         "folder": PKGDIR,
-        "config": api.get_userdir(),
+        "config_folder": api.get_userdir(),
         "download": conf["general"]["storage_folder"]["value"],
         "freespace": format.size(api.free_space()),
         "webif": conf["webui"]["port"]["value"],

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import json
 import random
 import re
@@ -7,7 +5,7 @@ import re
 import pycurl
 from pyload.core.network.http.exceptions import BadHeader
 from pyload.core.network.request_factory import get_request
-
+from ..helpers import parse_html_header
 from ..base.addon import BaseAddon
 
 
@@ -16,8 +14,6 @@ class TransmissionRPC(BaseAddon):
     __type__ = "addon"
     __version__ = "0.19"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://.+\.torrent|magnet:\?.+"
     __config__ = [
@@ -69,13 +65,8 @@ class TransmissionRPC(BaseAddon):
 
         except Exception as exc:
             if isinstance(exc, BadHeader) and exc.code == 409:
-                headers = dict(
-                    re.findall(r"(?P<name>.+?): (?P<value>.+?)\r?\n", req.header)
-                )
-                session_id = headers["X-Transmission-Session-Id"]
-                req.c.setopt(
-                    pycurl.HTTPHEADER, [f"X-Transmission-Session-Id: {session_id}"]
-                )
+                session_id = exc.headers["X-Transmission-Session-Id"]
+                req.set_header("X-Transmission-Session-Id", session_id)
                 try:
                     response = self.load(
                         transmission_rpc_url,

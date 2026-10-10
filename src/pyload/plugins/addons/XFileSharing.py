@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import inspect
 import re
 
@@ -11,15 +10,13 @@ class XFileSharing(BaseAddon):
     __version__ = "0.56"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
     __config__ = [
         ("enabled", "bool", "Activated", False),
         ("use_downloader_list", "bool", "Load listed hosters only", False),
         ("use_decrypter_list", "bool", "Load listed crypters only", False),
         ("use_builtin_list", "bool", "Load built-in plugin list", True),
-        ("hoster_list", "str", "Hoster list (comma separated)", ""),
-        ("crypter_list", "str", "Crypter list (comma separated)", ""),
+        ("hoster_list", "str", "Downloader list (comma separated)", ""),
+        ("crypter_list", "str", "Decrypter list (comma separated)", ""),
     ]
 
     __description__ = (

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 import urllib.parse
 
@@ -11,8 +9,6 @@ class XVideosCom(BaseDownloader):
     __type__ = "downloader"
     __version__ = "0.17"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?xvideos\.com/video(\d+)"
     __config__ = [("enabled", "bool", "Activated", True)]

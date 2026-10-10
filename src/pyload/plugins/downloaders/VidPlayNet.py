@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 #
 # Test links:
 # BigBuckBunny_320x180.mp4 - 61.7 Mb - http://vidplay.net/38lkev0h3jv0
@@ -12,8 +10,6 @@ class VidPlayNet(XFSDownloader):
     __type__ = "downloader"
     __version__ = "0.11"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?vidplay\.net/\w{12}"
     __config__ = [

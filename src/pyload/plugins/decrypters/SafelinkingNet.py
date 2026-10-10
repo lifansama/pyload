@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import json
 
 import pycurl
@@ -13,8 +12,6 @@ class SafelinkingNet(BaseDecrypter):
     __type__ = "decrypter"
     __version__ = "0.22"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?safelinking\.net/(?P<TYPE>[pd]/)?(?P<ID>\w{7})"
     __config__ = [
@@ -39,14 +36,9 @@ class SafelinkingNet(BaseDecrypter):
     # Safelinking seems to use a static SolveMedia key
     SOLVEMEDIA_KEY = "OZ987i6xTzNs9lw5.MA-2Vxbc-UxFrLu"
 
-    def api_response(self, url, post_data):
-        self.req.http.c.setopt(
-            pycurl.HTTPHEADER,
-            [
-                "Accept: application/json, text/plain, */*",
-                "Content-Type: application/json",
-            ],
-        )
+    def api_request(self, url, post_data):
+        self.req.http.set_header("Accept", "application/json, text/plain, */*")
+        self.req.http.set_header("Content-Type", "application/json")
 
         try:
             res = json.loads(self.load(url, post=json.dumps(post_data)))
@@ -56,17 +48,7 @@ class SafelinkingNet(BaseDecrypter):
             self.fail(exc)
 
         # Headers back to normal
-        self.req.http.c.setopt(
-            pycurl.HTTPHEADER,
-            [
-                "Accept: */*",
-                "Accept-Language: en-US,en",
-                "Accept-Charset: ISO-8859-1,utf-8;q=0.7,*;q=0.7",
-                "Connection: keep-alive",
-                "Keep-Alive: 300",
-                "Expect:",
-            ],
-        )
+        self.req.http.clear_headers(use_defaults=True)
 
         return res
 
@@ -86,7 +68,7 @@ class SafelinkingNet(BaseDecrypter):
 
             post_data = {"hash": self.info["pattern"]["ID"]}
 
-            link_info = self.api_response(
+            link_info = self.api_request(
                 "http://safelinking.net/v1/protected", post_data
             )
 
@@ -116,7 +98,7 @@ class SafelinkingNet(BaseDecrypter):
                 post_data["challengeId"] = challenge
                 post_data["type"] = "0"
 
-            json_res = self.api_response(
+            json_res = self.api_request(
                 "https://safelinking.net/v1/captcha", post_data
             )
 

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import hashlib
 import json
 import os
@@ -54,8 +52,6 @@ class StreamCz(SimpleDownloader):
     __type__ = "downloader"
     __version__ = "0.41"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?stream\.cz/[^/]+/(?P<EP>\d+).+"
     __config__ = [

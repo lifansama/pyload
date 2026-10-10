@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 import time
 
@@ -11,8 +9,6 @@ class MegasharesCom(BaseAccount):
     __type__ = "account"
     __version__ = "0.11"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __description__ = """Megashares.com account plugin"""
     __license__ = "GPLv3"

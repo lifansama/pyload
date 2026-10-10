@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import json
 
 from ..base.decrypter import BaseDecrypter
@@ -8,14 +6,10 @@ from ..base.decrypter import BaseDecrypter
 class MediafireComFolder(BaseDecrypter):
     __name__ = "MediafireComFolder"
     __type__ = "decrypter"
-    __version__ = "0.25"
+    __version__ = "0.26"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
-    __pattern__ = (
-        r"https?://(?:www\.)?mediafire\.com/(?:folder/|\?sharekey=|\?)(?P<ID>\w+)"
-    )
+    __pattern__ = r"https?://(?:www\.)?mediafire\.com/(?:folder/|\?sharekey=)(?P<ID>\w+)"
     __config__ = [
         ("enabled", "bool", "Activated", True),
         ("use_premium", "bool", "Use premium account if available", True),
@@ -37,7 +31,7 @@ class MediafireComFolder(BaseDecrypter):
     # See http://www.mediafire.com/developers/core_api/
     API_URL = "http://www.mediafire.com/api/"
 
-    def api_response(self, method, **kwargs):
+    def api_request(self, method, **kwargs):
         kwargs["response_format"] = "json"
         json_data = self.load(self.API_URL + method + ".php", get=kwargs)
         res = json.loads(json_data)
@@ -48,7 +42,7 @@ class MediafireComFolder(BaseDecrypter):
         return res
 
     def decrypt(self, pyfile):
-        api_data = self.api_response(
+        api_data = self.api_request(
             "folder/get_info", folder_key=self.info["pattern"]["ID"]
         )
         pack_name = (
@@ -56,7 +50,7 @@ class MediafireComFolder(BaseDecrypter):
             or self.pyfile.package().name
         )
 
-        api_data = self.api_response(
+        api_data = self.api_request(
             "folder/get_content",
             folder_key=self.info["pattern"]["ID"],
             content_type="files",

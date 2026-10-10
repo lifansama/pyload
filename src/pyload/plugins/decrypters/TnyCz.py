@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 
 from ..base.simple_decrypter import SimpleDecrypter
@@ -10,8 +8,6 @@ class TnyCz(SimpleDecrypter):
     __type__ = "decrypter"
     __version__ = "0.09"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://(?:www\.)?tny\.cz/\w+"
     __config__ = [

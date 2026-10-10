@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import base64
 import re
 import urllib.parse
@@ -13,8 +11,6 @@ class FileSharkPl(SimpleDownloader):
     __type__ = "downloader"
     __version__ = "0.22"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?fileshark\.pl/pobierz/\d+/\w+"
     __config__ = [
@@ -76,13 +72,13 @@ class FileSharkPl(SimpleDownloader):
                 self.log_warning(errmsg)
                 self.retry(
                     10,
-                    timedelta(minutes=30).seconds,
+                    timedelta(minutes=30).total_seconds(),
                     self._("Still no free download slots available"),
                 )
 
             else:
                 self.info["error"] = alert
-                self.retry(10, timedelta(minutes=10).seconds, self._("Try again later"))
+                self.retry(10, timedelta(minutes=10).total_seconds(), self._("Try again later"))
 
         self.info.pop("error", None)
 

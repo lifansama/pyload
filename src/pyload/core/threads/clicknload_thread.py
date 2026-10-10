@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: RaNaN
-
 import re
 import threading
 from base64 import standard_b64decode
@@ -47,7 +44,7 @@ class BaseServerThread(threading.Thread):
         pass
 
     def stop(self):
-        self.enabled = False  #: set flag and call shutdowm message, so thread can react
+        self.enabled = False  #: set flag and call shutdown message, so thread can react
         self.shutdown()
 
 
@@ -83,7 +80,7 @@ class CNLHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Language", "de")
         self.send_header("Vary", "Accept-Language, Cookie")
         self.send_header("Cache-Control", "no-cache, must-revalidate")
-        self.send_header("Content-type", "text/html")
+        self.send_header("Content-Type", "text/html")
         self.end_headers()
 
     def do_GET(self):

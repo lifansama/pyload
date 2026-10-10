@@ -1,5 +1,7 @@
-# -*- coding: utf-8 -*-
+import json
+import re
 
+from pyload.core.utils.misc import eval_js
 
 from ..anticaptchas.ReCaptcha import ReCaptcha
 from ..base.simple_downloader import SimpleDownloader
@@ -8,10 +10,8 @@ from ..base.simple_downloader import SimpleDownloader
 class UploadgigCom(SimpleDownloader):
     __name__ = "UploadgigCom"
     __type__ = "downloader"
-    __version__ = "0.04"
+    __version__ = "0.10"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?uploadgig.com/file/download/\w+"
     __config__ = [
@@ -33,11 +33,16 @@ class UploadgigCom(SimpleDownloader):
 
     OFFLINE_PATTERN = r"File not found"
 
-    LOGIN_PREMIUM = (
-        True
-    )  #: Free download is not possible because they blocked noscript ReCaptcha
-
     def handle_free(self, pyfile):
+        m = re.search(
+            r"<script>window\[String\.fromCharCode\(window\['m'\+'ax_upload_limi'\+'t'\]\)\] = (.+?);</script>",
+            self.data,
+        )
+        if m is None:
+            self.error(self._("f pattern not found"))
+
+        f = eval_js(m.group(1))
+
         url, inputs = self.parse_html_form('id="dl_captcha_form"')
         if inputs is None:
             self.error(self._("Free download form not found"))
@@ -49,7 +54,34 @@ class UploadgigCom(SimpleDownloader):
             self.error(self._("ReCaptcha key not found"))
 
         self.captcha = recaptcha
-        response, challenge = recaptcha.challenge(captcha_key)
+        response = recaptcha.challenge(captcha_key)
 
         inputs["g-recaptcha-response"] = response
         self.data = self.load(self.fixurl(url), post=inputs)
+
+        if self.data == "m":
+            self.log_warning(self._("Max downloads for this hour reached"))
+            self.retry(wait=60 * 60)
+
+        elif self.data in ("fl", "rfd"):
+            self.fail(self._("File can be downloaded by premium users only"))
+
+        elif self.data == "e":
+            self.retry()
+
+        elif self.data == "0":
+            self.retry_captcha()
+
+        else:
+            try:
+                res = json.loads(self.data)
+
+            except ValueError:
+                self.fail(self._("Illegal response from the server"))
+
+            if any([_x not in res for _x in ("cd", "sp", "q", "id")]):
+                self.fail(self._("Illegal response from the server"))
+
+            self.wait(res["cd"])
+
+            self.link = res["sp"] + "id=" + str(res["id"] - int(f)) + "&" + res["q"]

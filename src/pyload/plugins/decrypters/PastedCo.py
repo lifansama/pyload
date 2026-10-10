@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 
 from ..base.decrypter import BaseDecrypter
@@ -10,8 +8,6 @@ class PastedCo(BaseDecrypter):
     __type__ = "decrypter"
     __version__ = "0.06"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://pasted\.co/\w+"
     __config__ = [("enabled", "bool", "Activated", True)]

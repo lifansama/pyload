@@ -1,142 +1,382 @@
 <br />
 <p align="center">
-  <a href="https://pyload.net">
-    <img src="https://raw.githubusercontent.com/pyload/pyload/master/media/banner.png" alt="pyLoad" height="110" />
-  </a>
+  <img src="https://raw.githubusercontent.com/pyload/pyload/main/media/banner.png" alt="pyLoad" height="110" />
 </p>
-<h2 align="center">The Free and open-source Download Manager written in pure Python</h2>
-<br />
-<h3 align="center"><a href="#installation">Installation</a> | <a href="#usage">Usage</a> | <a href="#login-credentials">Login Credentials</a></h3>
-<br />
-<br />
-<p align="center">
-  <a href="https://travis-ci.org/pyload/pyload">
-    <img src="https://travis-ci.org/pyload/pyload.svg" alt="Build Status" />
+<h2 align="center">The free and open-source Download Manager written in pure Python</h2>
+<h4 align="center">
+  <img alt="status" src="https://img.shields.io/pypi/status/pyload-ng?style=flat-square">
+  <a href="https://github.com/pyload/pyload/actions">
+    <img alt="build" src="https://img.shields.io/github/actions/workflow/status/pyload/pyload/build-and-deploy.yml">
   </a>
-  <a href="https://pyup.io/repos/github/pyload/pyload/">
-    <img src="https://pyup.io/repos/github/pyload/pyload/shield.svg" alt="Updates" />
+  <a href="https://www.codacy.com/gh/pyload/pyload">
+    <img alt="codacy" src="https://img.shields.io/codacy/grade/1d047f77c0a6496eb708e1b3ca83006b?label=grade&style=flat-square">
   </a>
-  <a class="badge-align" href="https://www.codacy.com/app/pyLoad/pyload?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=pyload/pyload&amp;utm_campaign=Badge_Grade">
-    <img src="https://api.codacy.com/project/badge/Grade/240a2201eee54680b1c34bf86a32abd0" alt="Codacy Badge" />
-  </a>
-  <a href="https://github.com/ambv/black">
-    <img src="https://img.shields.io/badge/code%20style-black-000000.svg" alt="Code style: black" />
-  </a>
-  <a href="https://cla-assistant.io/pyload/pyload">
-    <img src="https://cla-assistant.io/readme/badge/pyload/pyload" alt="CLA assistant" />
-  </a>
-</p>
-<p align="center">
-  <img src="https://img.shields.io/pypi/status/pyload-ng.svg" alt="PyPI Status" />
+  <img alt="python" src="https://img.shields.io/pypi/pyversions/pyload-ng?style=flat-square">
   <a href="https://pypi.python.org/pypi/pyload-ng">
-    <img src="https://img.shields.io/pypi/v/pyload-ng.svg" alt="PyPI Version" />
+    <img alt="pypi" src="https://img.shields.io/pypi/v/pyload-ng?style=flat-square">
   </a>
-  <img src="https://img.shields.io/pypi/pyversions/pyload-ng.svg" alt="PyPI Python Versions" />
-  <a href="https://github.com/pyload/pyload/blob/develop/LICENSE.md">
-    <img src="https://img.shields.io/pypi/l/pyload-ng.svg" alt="PyPI License" />
+  <a href="https://pyup.io/repos/github/pyload/pyload">
+    <img alt="pyup" src="https://pyup.io/repos/github/pyload/pyload/shield.svg">
   </a>
-</p>
+</h4>
+
+<br />
 <br />
 
-pyLoad-ng development releases.
+## Overview
 
-Includes `pyload-core`, `pyload-plugins`, `pyload-webui`, `pyload-cli`.
+pyLoad is a lightweight, pure-Python download manager with a modern web UI and rich plugin ecosystem. It automates downloads from one-click hosters, cloud drives, and many other sources; supports premium accounts, captcha-solving services, and link decryption; and can run headless on servers, NAS devices, or desktops. Designed for extensibility and low resource usage.
 
-#### Warnings
+## Introduction
 
-- This package is automatically deployed from the [master codebase](https://github.com/pyload/pyload/tree/master) of the pyLoad repository.
-- We recommend to use the [stable codebase](https://github.com/pyload/pyload/tree/stable) in production.
+- Cross-platform: works on Linux, macOS, and Windows (Python 3.9+)
+- Web interface: manage downloads from your browser
+- Plugin-driven: hundreds of hosters, decrypters, and addons (notifications, schedulers, extractors, etc.)
 
+## Quick Start
 
-Installation
-------------
-
-### Complete Installation [recommended]
-
-To install pyLoad and all its optional dependencies,
-type in a terminal/command prompt window (as root/administrator):
+Open a terminal window and install pyLoad typing:
 
     pip install --pre pyload-ng[all]
 
-### Minimum Installation
-
-To install pyLoad (and its essential dependencies),
-type in a terminal/command prompt window (as root/administrator):
-
-    pip install --pre pyload-ng
-
-### Troubleshooting
-
-If the installation fails due to an error related to the `pycurl` package,
-you may have to install it apart, before installing pyLoad.
-
-Currently, PycURL does not support Python releases later than version 3.6,
-but un-official Windows binary packages for latest Python versions are available
-on https://www.lfd.uci.edu/~gohlke/pythonlibs/#pycurl .
-
-**As an example**,
-to install *PycURL 7.43.1* for Python 3.7 on Windows 64-bit, you have to
-download the file named `pycurl-7.43.1-cp37-cp37m-win_amd64.whl`
-and type in a terminal/command prompt window (as root/administrator):
-
-    pip install pycurl-7.43.1-cp37-cp37m-win_amd64.whl
-
-When the installation succesfully finishes you can safely delete the downloaded file.
-
-Visit http://pycurl.io/docs/latest/install.html to learn how to get and install
-the appropriate PycURL package for your system.
-
-
-Usage
------
-
-    usage: pyload [-h] [--version] [-d] [--userdir USERDIR] [--cachedir CACHEDIR]
-                  [--daemon] [--restore]
-
-    The Free and open-source Download Manager written in pure Python
-
-    optional arguments:
-      -h, --help           show this help message and exit
-      --version            show program's version number and exit
-      -d, --debug          enable debug mode
-      --userdir USERDIR    run with custom user folder
-      --cachedir CACHEDIR  run with custom cache folder
-      --daemon             daemonmize after start
-      --restore            restore default admin user
-
-### Web Interface
-
-To start pyLoad in *WebUI mode*,
-type in a terminal/command prompt window:
+To start pyLoad use the command:
 
     pyload
 
-To show the available options, type:
+See the [usage section](#usage) for information on all available options.
 
-    pyload -h
+If you want to uninstall pyLoad:
 
-To access the web interface open your web browser and visit the url http://localhost:8001 .
-You can change it afterward.
+    pip uninstall pyload-ng
 
-### Command Line Interface
+## Usage
 
-To start pyLoad in *CLI mode*,
-type terminal/command prompt window:
+    usage: pyload [-h] [-d] [-r] [--storagedir STORAGEDIR] [--userdir USERDIR]
+                  [--tempdir TEMPDIR] [--dry-run] [--daemon] [--version]
 
-    pyload-cli
+    The free and open-source Download Manager written in pure Python
 
-To show the available options, type:
+    optional arguments:
+      -h, --help                    show this help message and exit
+      -d, --debug                   enable debug mode
+      -r, --reset                   reset default username/password
+      --storagedir STORAGEDIR       use this location to save downloads
+      --userdir USERDIR             use this location to store user data files
+      --tempdir TEMPDIR             use this location to store temporary files
+      --dry-run                     test start-up and exit
+      --daemon                      run as daemon
+      --version                     show program's version number and exit
 
-    pyload-cli -h
+To start pyLoad, type the command:
 
-### Login Credentials
+    pyload
 
-Default username and password are `pyload`.
+This will create the following directories (if they don't exist already):
 
-It's highly recommended to change them on the first start.
+-   `~/Downloads/pyLoad`: where downloads will be saved.
+-   `~/.pyload`: where user data and configuration files are stored.
+-   `<TMPDIR>/pyLoad`: where temporary files are stored. `<TMPDIR>` is [platform-specific](https://docs.python.org/3/library/tempfile.html#tempfile.gettempdir).
 
+> **Note**:
+> On Windows, user data and configuration files are stored in the directory `~\AppData\Roaming\pyLoad`.
+
+### Help
+
+To show an overview of the available options, type:
+
+    pyload --help
+
+### Web Interface
+
+Open your web browser and visit the url http://localhost:8000 to have access to
+the pyLoad's web interface.
+
+-   Default username: `pyload`.
+-   Default password: `pyload`.
+
+**It's highly recommended to change the default access credentials on first start**.
+
+## Advanced Installation
+
+### Stable Release
+
+Get the latest stable release of pyLoad:
+
+    pip install pyload-ng
+
+> **Note**:
+> No stable release yet, pyLoad is now in pre-release phase.
+
+#### Available modules
+
+-   `pyload.core`: pyLoad's heart.
+-   `pyload.plugins`: the collection of officially supported plugins for pyLoad.
+-   `pyload.webui`: a web interface to interact with pyLoad.
+
+### Development Release
+
+You can force the installation of the latest development release of pyLoad,
+appending the option `--pre` to the installation command:
+
+    pip install --pre pyload-ng
+
+**Do not use development releases in production**. Unexpected crashes may occur.
+
+### Extra Dependencies
+
+Extra dependencies are non-essential packages that enable additional features of pyLoad.
+
+To install them you have to append a specific tag name to the installation command.
+
+#### Available tags
+
+-   `plugins`: includes packages used by several plugins.
+-   `build`: includes packages used to [build translations](#build-translations).
+-   `all`: includes both plugins and build packages.
+
+You can use a tag in this way:
+
+    pip install pyload-ng[plugins]
+
+Or group more together:
+
+    pip install pyload-ng[plugins][build]
+
+### Build Translations
+
+Use the command `build_locale` to retrieve and build the latest locale files (translations):
+
+    python setup.py build_locale
+
+Invoke `build_locale` before building the package (eg. `bdist_wheel`).
+
+> **Note**:
+>
+> You don't need to build the translations if you installed pyLoad through `pip`, they're already included.
+
+## Development
+
+### Set up your development environment
+
+* Clone the repository
+* Recommended: create a virtual environment for pyLoad
+```
+python3 -m venv .venv
+source .venv/bin/activate
+```
+* Install pyLoad as editable install with main and test dependencies
+```
+pip install -e ".[test]"
+```
+* Run pyLoad in debug mode
+```
+pyload -d
+```
+* To run the tests locally
+```
+pytest tests
+```
+
+### API specification
+
+pyLoad provides an OpenAPI specification for its REST API, visible via Swagger UI under the endpoint
+
+    <pyload base url>/api/
+
+The specification file itself is available under
+
+    <pyload base url>/api/openapi.json
+
+For reference, there is a local copy of the API specification in `openapi-generator/openapi.json`.
+Based on this file, it is possible to generate client code with the [official OpenAPI code generator](https://github.com/OpenAPITools/openapi-generator).
+For example, this command will generate a client for Android, using the dockerized generator:
+```
+docker run --rm -v "${PWD}:/local" openapitools/openapi-generator-cli generate \
+  -i /local/openapi-generator/openapi.json \
+  -g java \
+  -o /local/openapi-generator/out \
+  --additional-properties library=retrofit2,serializationLibrary=gson,openApiNullable=false,hideGenerationTimestamp=true,invokerPackage=org.pyload.android.openapi,apiPackage=org.pyload.android.openapi.api,modelPackage=org.pyload.android.openapi.models
+```
+
+If you are developing a client application for pyLoad, you can use this specification to generate a client
+in any language / framework the OpenAPI generator supports.
+
+The API specification is parsed from the REST API implementation.
+The local `openapi.json` copy should not be edited manually.
+Instead, if changes have been made to the API, re-generate the specification file by running
+
+    pyload --generate-api-spec 
+
+which will update the `openapi.json` file in place.
+
+## Report a Vulnerability
+
+Please refer to [SECURITY](https://github.com/pyload/pyload/blob/main/SECURITY.md) to read our security policy.
+
+## Contribute to pyLoad
+
+Please refer to [CONTRIBUTING](https://github.com/pyload/pyload/blob/main/CONTRIBUTING.md) to read our contribution guidelines.
+
+## Docker Images
+
+[![Docker build status](https://img.shields.io/docker/build/pyload/pyload?style=flat-square)](https://hub.docker.com/r/pyload/pyload)
+
+#### Available images
+
+-   [linuxserver/pyload-ng](https://hub.docker.com/r/linuxserver/pyload-ng)
+
+[//]: # (-   `pyload/pyload:alpine`: docker image for amd64, arm and arm64v8.)
+
+[//]: # (-   `pyload/pyload:ubuntu-arm32v7`: docker image for arm32v7.)
+
+[//]: # (-   `pyload/pyload`: alias of `pyload/pyload:alpine`.)
+
+### Create Container
+
+    docker create --name=pyload -v <USERDIR>:/config -v <STORAGEDIR>:/downloads --restart unless-stopped pyload/pyload
+
+> **Note**:
+>
+> Replace `<STORAGEDIR>` with the location on the host machine where you want that downloads will be saved.
+>
+> Replace `<USERDIR>` with where you want that user data files (configurations) are stored.
+
+### Start Container
+
+    docker start pyload
+
+### Stop Container
+
+    docker stop pyload
+
+### Show Logs
+
+    docker logs -f pyload
+
+### Docker Compose
+
+Compatible with `docker-compose` v2 schemas:
+
+    ---
+    version: '2'
+    services:
+      pyload:
+        image: pyload
+        build: <REPODIR>
+        container_name: pyload
+        environment:
+          - PUID=1000
+          - PGID=1000
+          - TZ=Europe/London
+        volumes:
+          - <USERDIR>:/config
+          - <STORAGEDIR>:/downloads
+        ports:
+          - 8000:8000 # Webinterface
+          - 9666:9666 # Click 'N' Load
+        restart: unless-stopped
+
+> **Note**:
+>
+> Replace `<REPODIR>` with the location on the host machine where you have checked out the pyload repository.
+>
+> Replace `<STORAGEDIR>` with the location on the host machine where you want that downloads will be saved.
+>
+> Replace `<USERDIR>` with where you want that user data files (configurations) are stored.
+
+## Troubleshooting
+
+### pip not found
+
+Retry replacing the command `pip` with `pip3`:
+
+    pip3 install pyload-ng
+
+If fails again, you may not have the Python interpreter
+or the pip package manager installed on your system.
+
+Try reinstalling Python to fix this issue.
+
+Visit https://www.python.org/downloads
+to get the proper **Python 3** release for your system.
+
+### pyload-ng not found
+
+Check the version of the Python interpreters installed on your system.
+
+To show the version of your **default** Python interpreter, type the command:
+
+    python --version
+
+If the version is too old, try to upgrage Python, then you can retry to install pyLoad.
+
+Python releases below version 3.9 are not supported!
+
+### Setuptools is too old
+
+To upgrade the `setuptools` package, type the command:
+
+    pip install --upgrade setuptools
+
+### Permission denied
+
+Under Unix-based systems, try to install pyLoad with root privileges.
+
+Prefix the installation/uninstallation command with `sudo`:
+
+    sudo pip install pyload-ng
+    sudo pip uninstall pyload-ng
+
+Under Windows systems, open a _Command Prompt as administrator_ to install pyLoad
+with root privileges.
+
+You can also try to install the `pyload-ng` package **without** root privileges.
+
+Append the option `--user` to the installation command:
+
+    pip install --user pyload-ng
+
+## Licensing
+
+[![license](https://img.shields.io/pypi/l/pyload-ng?style=flat-square)](https://github.com/pyload/pyload/blob/main/LICENSE.md)
+[![cla](https://cla-assistant.io/readme/badge/pyload/pyload)](https://cla-assistant.io/pyload/pyload)
+
+### Open Source License
+
+You are allowed to use this software under the terms of the **GNU Affero
+General Public License** as published by the Free Software Foundation;
+either **version 3** of the License, or (at your option) any later version.
+
+Please refer to [LICENSE](https://github.com/pyload/pyload/blob/main/LICENSE.md) to read the project license.
+
+### Alternative License
+
+With an explicit permission of the **pyLoad team** you may use or distribute
+this software under a different license according to the agreement.
+
+### Contributor License Agreement
+
+Please refer to [CLA](https://cla-assistant.io/pyload/pyload) for the full agreement conditions.
+
+This is essentially what you will be agreeing to:
+
+-   You claim to have the right to make the contribution
+    (i.e. it's your own work).
+-   You grant the project a perpetual, non-exclusive license to use the
+    contribution.
+-   You grant the project rights to change the outbound license that we use to
+    distribute the code.
+-   You retain full ownership (copyright) of your submission and are free to do
+    with it as you please.
+
+Contact us at licensing@pyload.net for any question about the pyLoad licensing policy.
+
+## Credits
+
+Please refer to [AUTHORS](https://github.com/pyload/pyload/blob/main/AUTHORS.md) to know a bit more about the people behind pyLoad.
 
 <br />
 
--------------------------
-###### © 2019 pyLoad team
+---
+
+###### © 2008-2026 pyLoad team

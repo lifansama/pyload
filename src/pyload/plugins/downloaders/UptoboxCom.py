@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 
 from ..base.simple_downloader import SimpleDownloader
@@ -8,12 +6,10 @@ from ..base.simple_downloader import SimpleDownloader
 class UptoboxCom(SimpleDownloader):
     __name__ = "UptoboxCom"
     __type__ = "downloader"
-    __version__ = "0.36"
+    __version__ = "0.41"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
-    __pattern__ = r"https?://(?:www\.)?(uptobox|uptostream)\.com/\w{12}"
+    __pattern__ = r"https?://(?:www\.)?(uptobox|uptostream)\.(?:com|eu|link)/(?P<ID>\w{12})"
     __config__ = [
         ("enabled", "bool", "Activated", True),
         ("use_premium", "bool", "Use premium account if available", True),
@@ -29,7 +25,7 @@ class UptoboxCom(SimpleDownloader):
         ("GammaC0de", "nitzo2001[AT]yahoo[DOT]com"),
     ]
 
-    PLUGIN_DOMAIN = "uptobox.com"
+    PLUGIN_DOMAIN = "uptobox.link"
 
     INFO_PATTERN = (
         r"""(?:"para_title">|<h1(?: .*)?>)(?P<N>.+) \((?P<S>[\d.,]+) (?P<U>[\w^_]+)\)"""
@@ -38,14 +34,14 @@ class UptoboxCom(SimpleDownloader):
     TEMP_OFFLINE_PATTERN = r""">Service Unavailable"""
     WAIT_PATTERN = r"""data-remaining-time=["'](\d+)["']"""
     LINK_PATTERN = (
-        r"""["'](https?://(?:obwp\d+\.uptobox\.com|\w+\.uptobox\.com/dl?)/.*?)["']"""
+        r"""['"](https?://(?:obwp\d+\.uptobox\.(?:com|eu|link)|\w+\.uptobox\.(?:com|eu|link)/dl?)/.+?)['"]"""
     )
 
     DL_LIMIT_PATTERN = r"""or you can wait (.+) to launch a new download"""
-    URL_REPLACEMENTS = [("http://", "https://")]
+    URL_REPLACEMENTS = [(__pattern__ + ".*", r"https://uptobox.link/\g<ID>")]
 
     def setup(self):
-        self.multi_dl = True
+        self.multi_dl = self.premium
         self.chunk_limit = 1
         self.resume_download = True
 

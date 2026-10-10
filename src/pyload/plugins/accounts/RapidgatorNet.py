@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import json
 
 from ..base.account import BaseAccount
@@ -8,10 +6,8 @@ from ..base.account import BaseAccount
 class RapidgatorNet(BaseAccount):
     __name__ = "RapidgatorNet"
     __type__ = "account"
-    __version__ = "0.24"
+    __version__ = "0.25"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __description__ = """Rapidgator.net account plugin"""
     __license__ = "GPLv3"
@@ -24,7 +20,7 @@ class RapidgatorNet(BaseAccount):
 
     API_URL = "https://rapidgator.net/api/user/"
 
-    def api_response(self, method, **kwargs):
+    def api_request(self, method, **kwargs):
         json_data = self.load(self.API_URL + method, get=kwargs)
         return json.loads(json_data)
 
@@ -34,12 +30,11 @@ class RapidgatorNet(BaseAccount):
         premium = False
 
         try:
-            json_data = self.api_response("info", sid=data["sid"])
+            json_data = self.api_request("info", sid=data["sid"])
 
             if json_data["response_status"] == 200:
                 validuntil = json_data["response"]["expire_date"]
-                # TODO: Remove `>> 10` in 0.6.x
-                trafficleft = float(json_data["response"]["traffic_left"]) >> 10
+                trafficleft = float(json_data["response"]["traffic_left"])
                 premium = True
 
             else:
@@ -58,7 +53,7 @@ class RapidgatorNet(BaseAccount):
 
     def signin(self, user, password, data):
         try:
-            json_data = self.api_response("login", username=user, password=password)
+            json_data = self.api_request("login", username=user, password=password)
 
             if json_data["response_status"] == 200:
                 data["sid"] = str(json_data["response"]["session_id"])

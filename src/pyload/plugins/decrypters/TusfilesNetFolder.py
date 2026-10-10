@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import math
 import re
 import urllib.parse
@@ -12,8 +10,6 @@ class TusfilesNetFolder(XFSDecrypter):
     __type__ = "decrypter"
     __version__ = "0.17"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?tusfiles\.net/go/(?P<ID>\w+)"
     __config__ = [

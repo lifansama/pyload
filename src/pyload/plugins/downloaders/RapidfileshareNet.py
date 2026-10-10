@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from ..base.xfs_downloader import XFSDownloader
 
 
@@ -8,8 +6,6 @@ class RapidfileshareNet(XFSDownloader):
     __type__ = "downloader"
     __version__ = "0.09"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://(?:www\.)?rapidfileshare\.net/\w{12}"
     __config__ = [

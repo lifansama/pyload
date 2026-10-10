@@ -1,46 +1,140 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: mkaay, RaNaN
-
-import importlib
+import importlib.abc
+import importlib.util
 import os
 import re
 import sys
 from ast import literal_eval
 from itertools import chain
 
-import semver
-
 from pyload import APPID, PKGDIR
+
+# import semver
+
+
+class ImportRedirector(importlib.abc.MetaPathFinder):
+    ROOT = "pyload.plugins."
+
+    class CustomModuleLoader(importlib.abc.Loader):
+        def __init__(self, fullpath, public_name, parent_pkg):
+            self.fullpath = fullpath
+            self.public_name = public_name
+            self.parent_pkg = parent_pkg
+
+        def create_module(self, spec):
+            return None  # Use default module creation
+
+        def exec_module(self, module):
+            # Execute the redirected module file
+            with open(self.fullpath, mode="r", encoding="utf-8-sig") as fp:
+                code = fp.read()
+            exec(code, module.__dict__)
+
+            # Adjust module identity so relative imports resolve to the original package
+            module.__name__ = self.public_name
+            module.__package__ = self.parent_pkg
+
+            if getattr(module, "__spec__", None) is not None:
+                module.__spec__.name = self.public_name
+
+    def __init__(self, core):
+        self.pyload = core
+        self._ = core._
+        self.redirect_path = os.path.join(self.pyload.userdir, "plugins")
+
+        os.makedirs(self.redirect_path, exist_ok=True)
+        try:
+            init_py = os.path.join(self.redirect_path, "__init__.py")
+            with open(init_py, mode="wb"):
+                pass
+            os.chmod(init_py, 0o600)
+        except OSError:
+            pass
+
+        # register for import addon
+        sys.meta_path.insert(0, self)
+
+    def find_spec(self, fullname, path, target=None):
+        split = fullname.split(".")
+        if fullname.startswith(self.ROOT) and len(split) == 4:
+            plugin_subfolder, plugin_name = split[2:4]
+            if plugin_subfolder != "base" and plugin_subfolder[-1] == "s":
+                plugin_type = plugin_subfolder[:-1]  #: remove trailing plural "s" character
+            else:
+                plugin_type = plugin_subfolder
+
+            plugins = self.pyload.plugin_manager.plugins
+            if (
+                plugin_type in plugins and
+                plugin_name in plugins[plugin_type] and
+                plugins[plugin_type][plugin_name]["user"]
+            ):
+                # Path to the user plugin file that overrides the stock one
+                fullpath = os.path.join(self.redirect_path, split[2], f"{split[3]}.py")
+
+                # Keep the public (original) name so relative imports resolve correctly
+                public_name = fullname
+                parent_pkg = ".".join(split[:-1])
+
+                self.pyload.log.debug("Redirected import {} -> file {}".format(fullname, fullpath))
+
+                spec = importlib.util.spec_from_file_location(
+                    public_name,
+                    fullpath,
+                    loader=self.CustomModuleLoader(fullpath, public_name, parent_pkg)
+                )
+                if spec is not None:
+                    # Ensure spec carries the correct name for relative import machinery
+                    spec.name = public_name
+                return spec
+
+        # return None to tell the python this finder can't find the module
+        return None
+
+    def create_module(self, spec):
+        return None  # Use default module creation
+
+    def exec_module(self, module):
+        return module
 
 
 class PluginManager:
-    ROOT = "pyload.plugins."
-    USERROOT = "plugins."
     TYPES = (
         "decrypter",
         "container",
         "downloader",
         "anticaptcha",
+        "extractor",
         "account",
         "addon",
         "base",
     )
 
-    _PATTERN = re.compile(r'\s*__pattern__\s*=\s*r?(?:"|\')([^"\']+)')
-    _VERSION = re.compile(r'\s*__version__\s*=\s*(?:"|\')([\d.]+)')
-    _PYLOAD_VERSION = re.compile(r'\s*__pyload_version__\s*=\s*(?:"|\')([\d.]+)')
-    _CONFIG = re.compile(r"\s*__config__\s*=\s*(\[[^\]]+\])", re.MULTILINE)
-    _DESC = re.compile(r'\s*__description__\s*=\s*(?:"|"""|\')([^"\']+)', re.MULTILINE)
+    _RE_PATTERN = re.compile(r'\s*__pattern__\s*=\s*r?["\']([^"\']+)')
+    _RE_VERSION = re.compile(r'\s*__version__\s*=\s*["\']([\d.]+)')
+    # _RE_PYLOAD_VERSION = re.compile(r'\s*__pyload_version__\s*=\s*(?:"|\')([\d.]+)')
+    _RE_CONFIG = re.compile(r"\s*__config__\s*=\s*(\[[^\]]+\])", re.MULTILINE)
+    _RE_DESC = re.compile(r'\s*__description__\s*=\s*(?:"|"""|\')([^"\']+)', re.MULTILINE)
 
     def __init__(self, core):
         self.pyload = core
         self._ = core._
 
         self.plugins = {}
+        self.account_plugins = []
+        self.addon_plugins = []
+        self.anticaptcha_plugins = []
+        self.container_plugins = []
+        self.decrypter_plugins = []
+        self.downloader_plugins = []
+        self.extractor_plugins = []
+        self.base_plugins = []
+
+        self.import_redirector = ImportRedirector(core)
+
         self.create_index()
 
-        # register for import addon
-        sys.meta_path.append(self)
+        # save generated config
+        self.pyload.config.save_config(self.pyload.config.plugin, self.pyload.config.pluginpath)
 
     def create_index(self):
         """
@@ -63,43 +157,36 @@ class PluginManager:
 
         self.pyload.log.debug("Indexing plugins...")
 
-        sys.path.append(os.path.join(self.pyload.userdir, "plugins"))
-
-        userplugins_dir = os.path.join(self.pyload.userdir, "plugins")
-        os.makedirs(userplugins_dir, exist_ok=True)
-
-        try:
-            fp = open(os.path.join(userplugins_dir, "__init__.py"), mode="wb")
-            fp.close()
-        except Exception:
-            pass
-
-        self.crypter_plugins, config = self.parse("decrypters", pattern=True)
-        self.plugins["decrypter"] = self.crypter_plugins
+        self.decrypter_plugins, config = self.parse("decrypters", pattern=True)
+        self.plugins["decrypter"] = self.decrypter_plugins
         default_config = config
 
         self.container_plugins, config = self.parse("containers", pattern=True)
         self.plugins["container"] = self.container_plugins
         merge(default_config, config)
 
-        self.hoster_plugins, config = self.parse("downloaders", pattern=True)
-        self.plugins["downloader"] = self.hoster_plugins
+        self.downloader_plugins, config = self.parse("downloaders", pattern=True)
+        self.plugins["downloader"] = self.downloader_plugins
         merge(default_config, config)
 
         self.addon_plugins, config = self.parse("addons")
         self.plugins["addon"] = self.addon_plugins
         merge(default_config, config)
 
-        self.captcha_plugins, config = self.parse("anticaptchas")
-        self.plugins["anticaptcha"] = self.captcha_plugins
+        self.anticaptcha_plugins, config = self.parse("anticaptchas")
+        self.plugins["anticaptcha"] = self.anticaptcha_plugins
+        merge(default_config, config)
+
+        self.extractor_plugins, config = self.parse("extractors")
+        self.plugins["extractor"] = self.extractor_plugins
         merge(default_config, config)
 
         self.account_plugins, config = self.parse("accounts")
         self.plugins["account"] = self.account_plugins
         merge(default_config, config)
 
-        self.internal_plugins, config = self.parse("base")
-        self.plugins["base"] = self.internal_plugins
+        self.base_plugins, config = self.parse("base")
+        self.plugins["base"] = self.base_plugins
         merge(default_config, config)
 
         for name, config in default_config.items():
@@ -107,15 +194,14 @@ class PluginManager:
             config = [[k] + list(v) for k, v in config.items()]
             try:
                 self.pyload.config.add_plugin_config(name, config, desc)
-            except Exception as exc:
+            except Exception:
                 self.pyload.log.error(
                     self._("Invalid config in {}: {}").format(name, config),
-                    exc,
                     exc_info=self.pyload.debug > 1,
                     stack_info=self.pyload.debug > 2,
                 )
 
-    def parse(self, folder, pattern=False, home={}):
+    def parse(self, folder, pattern=False, home=None):
         """
         returns dict with information
         home contains parsed plugins from pyload.
@@ -125,15 +211,17 @@ class PluginManager:
         }
 
         """
+        home = home or {}
         plugins = {}
         if home:
             pfolder = os.path.join(self.pyload.userdir, "plugins", folder)
             os.makedirs(pfolder, exist_ok=True)
             try:
-                fp = open(os.path.join(pfolder, "__init__.py"), mode="wb")
-                fp.close()
-            except Exception:
+                with open(os.path.join(pfolder, "__init__.py"), mode="wb"):
+                    pass
+            except OSError:
                 pass
+
         else:
             pfolder = os.path.join(PKGDIR, "plugins", folder)
 
@@ -143,40 +231,38 @@ class PluginManager:
                 os.path.isfile(os.path.join(pfolder, entry)) and entry.endswith(".py")
             ) and not entry.startswith("_"):
 
-                with open(os.path.join(pfolder, entry)) as data:
+                with open(os.path.join(pfolder, entry), encoding="utf-8-sig") as data:
                     content = data.read()
 
-                name = entry[:-3]
-                if name[-1] == ".":
-                    name = name[:-4]
+                name = entry[:-3]  #: Trim ending ".py"
 
-                m_pyver = self._PYLOAD_VERSION.search(content)
-                if m_pyver is None:
-                    self.pyload.log.debug(
-                        f"__pyload_version__ not found in plugin {name}"
-                    )
-                else:
-                    pyload_version = m_pyver.group(1)
+                # m_pyver = self._RE_PYLOAD_VERSION.search(content)
+                # if m_pyver is None:
+                #     self.pyload.log.debug(
+                #         f"__pyload_version__ not found in plugin {name}"
+                #     )
+                # else:
+                #     pyload_version = m_pyver.group(1)
 
-                    requires_version = f"{pyload_version}.0"
-                    requires_version_info = semver.parse_version_info(requires_version)
+                #     requires_version = f"{pyload_version}.0"
+                #     requires_version_info = semver.parse_version_info(requires_version)
 
-                    if self.pyload.version_info.major:
-                        core_version = self.pyload.version_info.major
-                        plugin_version = requires_version_info.major
-                    else:
-                        core_version = self.pyload.version_info.minor
-                        plugin_version = requires_version_info.minor
+                #     if self.pyload.version_info.major:
+                #         core_version = self.pyload.version_info.major
+                #         plugin_version = requires_version_info.major
+                #     else:
+                #         core_version = self.pyload.version_info.minor
+                #         plugin_version = requires_version_info.minor
 
-                    if core_version > plugin_version:
-                        self.pyload.log.warning(
-                            self._(
-                                "Plugin {} not compatible with current pyLoad version"
-                            ).format(name)
-                        )
-                        continue
+                #     if core_version > plugin_version:
+                #         self.pyload.log.warning(
+                #             self._(
+                #                 "Plugin {} not compatible with current pyLoad version"
+                #             ).format(name)
+                #         )
+                #         continue
 
-                m_ver = self._VERSION.search(content)
+                m_ver = self._RE_VERSION.search(content)
                 if m_ver is None:
                     self.pyload.log.debug(f"__version__ not found in plugin {name}")
                     version = 0
@@ -191,22 +277,21 @@ class PluginManager:
                 plugins[name] = {}
                 plugins[name]["v"] = version
 
-                module = entry.replace(".pyc", "").replace(".py", "")
-
-                # the plugin is loaded from user directory
+                # was the plugin is loaded from user directory?
                 plugins[name]["user"] = True if home else False
-                plugins[name]["name"] = module
+                plugins[name]["name"] = name
                 plugins[name]["folder"] = folder
 
                 if pattern:
-                    m_pat = self._PATTERN.search(content)
+                    m_pat = self._RE_PATTERN.search(content)
                     pattern = r"^unmachtable$" if m_pat is None else m_pat.group(1)
 
                     plugins[name]["pattern"] = pattern
 
                     try:
                         plugins[name]["re"] = re.compile(pattern)
-                    except Exception:
+                    except re.error:
+                        plugins[name]["re"] = re.compile(r"(?!.*)")
                         self.pyload.log.error(
                             self._("{} has a invalid pattern").format(name)
                         )
@@ -216,10 +301,10 @@ class PluginManager:
                     self.pyload.config.delete_config(name)
                     continue
 
-                m_desc = self._DESC.search(content)
+                m_desc = self._RE_DESC.search(content)
                 desc = "" if m_desc is None else m_desc.group(1)
 
-                config = self._CONFIG.findall(content)
+                config = self._RE_CONFIG.findall(content)
                 if not config:
                     new_config = {"enabled": ["bool", "Activated", False], "desc": desc}
                     configs[name] = new_config
@@ -256,26 +341,26 @@ class PluginManager:
         """
         parse plugins for given list of urls.
         """
-        last = None
-        res = []  #: tupels of (url, plugin)
+        last = (None, {})
+        res = []  #: tuples of (url, plugin)
 
         for url in urls:
             if type(url) not in (
                 str,
                 bytes,
                 memoryview,
-            ):  #: check memoryview (as py2 byffer)
+            ):  #: check memoryview (as py2 buffer)
                 continue
             found = False
 
             # NOTE: E1136: Value 'last' is unsubscriptable (unsubscriptable-object)
-            if last and last[1]["re"].match(url):
+            if last != (None, {}) and last[1]["re"].match(url):
                 res.append((url, last[0]))
                 continue
 
             for name, value in chain(
-                self.crypter_plugins.items(),
-                self.hoster_plugins.items(),
+                self.decrypter_plugins.items(),
+                self.downloader_plugins.items(),
                 self.container_plugins.items(),
             ):
                 if value["re"].match(url):
@@ -295,71 +380,67 @@ class PluginManager:
                 return self.plugins[ptype][name], ptype
         return None, None
 
-    def get_plugin(self, name, original=False):
+    def get_plugin(self, plugin_name, original=False):
         """
         return plugin module from downloader|decrypter|container.
         """
-        plugin, type = self.find_plugin(name)
+        plugin, plugin_type = self.find_plugin(plugin_name)
 
         if not plugin:
-            self.pyload.log.warning(self._("Plugin {} not found").format(name))
-            plugin = self.hoster_plugins["DefaultPlugin"]
+            self.pyload.log.warning(self._("Plugin {} not found").format(plugin_name))
+            plugin = self.downloader_plugins["DefaultPlugin"]
 
         if "new_module" in plugin and not original:
             return plugin["new_module"]
 
-        return self.load_module(type, name)
+        return self.load_module(plugin_type, plugin_name)
 
     def get_plugin_name(self, name):
         """
         used to obtain new name if other plugin was injected.
         """
-        plugin, type = self.find_plugin(name)
+        plugin, plugin_type = self.find_plugin(name)
 
         if "new_name" in plugin:
             return plugin["new_name"]
 
         return name
 
-    def load_module(self, type, name):
+    def load_module(self, module_type, module_name):
         """
         Returns loaded module for plugin.
 
-        :param type: plugin type, subfolder of module.plugins
-        :param name:
+        :param module_type: plugin type, subfolder of pyload.plugins
+        :param module_name: plugin name
         """
-        plugins = self.plugins[type]
-        if name in plugins:
-            if APPID in plugins[name]:
-                return plugins[name][APPID]
+        plugins = self.plugins[module_type]
+        if module_name in plugins:
+            if APPID in plugins[module_name]:
+                return plugins[module_name][APPID]  #: use cached module
             try:
-                module_name = plugins[name]["name"]
-                module_folder = plugins[name]["folder"]
-                module = __import__(
-                    self.ROOT + f"{module_folder}.{module_name}",
-                    globals(),
-                    locals(),
-                    plugins[name]["name"],
-                )
-                plugins[name][APPID] = module  #: cache import, maybe unneeded
+                module_name = plugins[module_name]["name"]
+                module_folder = plugins[module_name]["folder"]
+                module_abs_name = f"{self.import_redirector.ROOT}{module_folder}.{module_name}"
+                module = importlib.import_module(module_abs_name)
+                plugins[module_name][APPID] = module  #: cache import, maybe unneeded
                 return module
             except Exception as exc:
                 self.pyload.log.error(
-                    self._("Error importing {name}: {msg}").format(name=name, msg=exc),
+                    self._("Error importing {name}: {msg}").format(name=module_name, msg=exc),
                     exc_info=self.pyload.debug > 1,
                     stack_info=self.pyload.debug > 2,
                 )
         else:
-            self.pyload.log.debug(f"Plugin {name} not found")
+            self.pyload.log.debug(f"Plugin {module_name} not found")
             self.pyload.log.debug(f"Available plugins : {plugins}")
 
-    def load_class(self, type, name):
+    def load_class(self, module_type, module_name):
         """
         Returns the class of a plugin with the same name.
         """
-        module = self.load_module(type, name)
+        module = self.load_module(module_type, module_name)
         if module:
-            return getattr(module, name)
+            return getattr(module, module_name)
 
     def get_account_plugins(self):
         """
@@ -367,53 +448,9 @@ class PluginManager:
         """
         return list(self.account_plugins.keys())
 
-    def find_module(self, fullname, path=None):
-        # redirecting imports if necesarry
-        if fullname.startswith(self.ROOT) or fullname.startswith(
-            self.USERROOT
-        ):  #: os.seperate pyload plugins
-            if fullname.startswith(self.USERROOT):
-                user = 1
-            else:
-                user = 0  #: used as bool and int
-
-            split = fullname.split(".")
-            if len(split) != 4 - user:
-                return
-            type, name = split[2 - user : 4 - user]
-
-            if type in self.plugins and name in self.plugins[type]:
-                # userplugin is a newer version
-                if not user and self.plugins[type][name]["user"]:
-                    return self
-                # imported from userdir, but pyloads is newer
-                if user and not self.plugins[type][name]["user"]:
-                    return self
-
-    def load_module(self, name, replace=True):
-        if name not in sys.modules:  #: could be already in modules
-            if replace:
-                if self.ROOT in name:
-                    newname = name.replace(self.ROOT, self.USERROOT)
-                else:
-                    newname = name.replace(self.USERROOT, self.ROOT)
-            else:
-                newname = name
-
-            base, plugin = newname.rsplit(".", 1)
-
-            self.pyload.log.debug(f"Redirected import {name} -> {newname}")
-
-            module = __import__(newname, globals(), locals(), [plugin])
-            # inject under new an old name
-            sys.modules[name] = module
-            sys.modules[newname] = module
-
-        return sys.modules[name]
-
     def reload_plugins(self, type_plugins):
         """
-        reloads and reindexes plugins.
+        reloads and reindex plugins.
         """
 
         def merge(dst, src, overwrite=False):
@@ -442,32 +479,39 @@ class PluginManager:
             else:
                 as_dict[t] = [n]
 
-        # we do not reload addons or internals, would cause to much side effects
+        # we do not reload addons or base, would cause too much side effects
         if "addon" in as_dict or "base" in as_dict:
             return False
 
-        for type in as_dict.keys():
-            for plugin in as_dict[type]:
-                if plugin in self.plugins[type]:
-                    if APPID in self.plugins[type][plugin]:
-                        self.pyload.log.debug(f"Reloading {plugin}")
-                        importlib.reload(self.plugins[type][plugin][APPID])
+        for plugin_type in as_dict.keys():
+            for plugin_name in as_dict[plugin_type]:
+                if plugin_name in self.plugins[plugin_type]:
+                    if APPID in self.plugins[plugin_type][plugin_name]:
+                        self.pyload.log.debug(f"Reloading {plugin_name}")
+                        importlib.reload(self.plugins[plugin_type][plugin_name][APPID])
 
         # index creation
-        self.crypter_plugins, config = self.parse("decrypters", pattern=True)
-        self.plugins["decrypter"] = self.crypter_plugins
+        self.decrypter_plugins, config = self.parse("decrypters", pattern=True)
+        self.plugins["decrypter"] = self.decrypter_plugins
         default_config = config
 
         self.container_plugins, config = self.parse("containers", pattern=True)
         self.plugins["container"] = self.container_plugins
         merge(default_config, config)
 
-        self.hoster_plugins, config = self.parse("downloaders", pattern=True)
-        self.plugins["downloader"] = self.hoster_plugins
+        self.downloader_plugins, config = self.parse("downloaders", pattern=True)
+        self.plugins["downloader"] = self.downloader_plugins
         merge(default_config, config)
 
-        self.captcha_plugins, config = self.parse("anticaptchas")
-        self.plugins["anticaptcha"] = self.captcha_plugins
+        temp, config = self.parse("addons")
+        merge(default_config, config)
+
+        self.anticaptcha_plugins, config = self.parse("anticaptchas")
+        self.plugins["anticaptcha"] = self.anticaptcha_plugins
+        merge(default_config, config)
+
+        self.extractor_plugins, config = self.parse("extractors")
+        self.plugins["extractor"] = self.extractor_plugins
         merge(default_config, config)
 
         self.account_plugins, config = self.parse("accounts")

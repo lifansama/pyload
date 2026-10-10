@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 #
 # Test links:
 #   http://vk.com/video_ext.php?oid=166335015&id=162608895&hash=b55affa83774504b&hd=1
@@ -14,8 +12,6 @@ class VkCom(SimpleDownloader):
     __type__ = "downloader"
     __version__ = "0.06"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?vk\.com/video_ext\.php/\?.+"
     __config__ = [

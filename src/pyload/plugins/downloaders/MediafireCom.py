@@ -1,5 +1,7 @@
-# -*- coding: utf-8 -*-
+import base64
+import re
 
+from pyload.core.utils.convert import to_str
 
 from ..anticaptchas.ReCaptcha import ReCaptcha
 from ..anticaptchas.SolveMedia import SolveMedia
@@ -9,12 +11,10 @@ from ..base.simple_downloader import SimpleDownloader
 class MediafireCom(SimpleDownloader):
     __name__ = "MediafireCom"
     __type__ = "downloader"
-    __version__ = "0.98"
+    __version__ = "1.02"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
-    __pattern__ = r"https?://(?:www\.)?mediafire\.com/(file/|view/\??|download(\.php\?|/)|\?)(?P<ID>\w+)"
+    __pattern__ = r"https?://(?:www\.)?mediafire\.com/(file(?:_premium)?/|view/\??|download(\.php\?|/)|\?)(?P<ID>\w+)"
     __config__ = [
         ("enabled", "bool", "Activated", True),
         ("use_premium", "bool", "Use premium account if available", True),
@@ -32,8 +32,8 @@ class MediafireCom(SimpleDownloader):
         ("GammaC0de", "nitzo2001[AT]yahoo[DOT]com"),
     ]
 
-    NAME_PATTERN = r'<META NAME="description" CONTENT="(?P<N>.+?)"/>'
-    SIZE_PATTERN = r'<div class="fileName">(?P<N>.+?)</div>'
+    NAME_PATTERN = r'<div class="filename">(?P<N>.+?)</div>'
+    SIZE_PATTERN = r'>File size: <span>(?P<S>[\d.,]+)(?P<U>[\w^_]+)<'
 
     TEMP_OFFLINE_PATTERN = r"^unmatchable$"
     OFFLINE_PATTERN = r'class="error_msg_title"'
@@ -68,7 +68,7 @@ class MediafireCom(SimpleDownloader):
 
             if url:
                 self.captcha = recaptcha
-                response, challenge = recaptcha.challenge(captcha_key)
+                response = recaptcha.challenge(captcha_key)
 
                 inputs["g-recaptcha-response"] = response
                 self.data = self.load(self.fixurl(url), post=inputs)
@@ -93,4 +93,9 @@ class MediafireCom(SimpleDownloader):
                 if self.PASSWORD_PATTERN in self.data:
                     self.fail(self._("Wrong password"))
 
-        return super().handle_free(pyfile)
+        m = re.search(r'data-scrambled-url="([^"]+)"', self.data)
+        if m is not None:
+            self.link = to_str(base64.b64decode(m.group(1)))
+
+        else:
+            super().handle_free(pyfile)

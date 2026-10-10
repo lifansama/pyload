@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: RaNaN
-
 import os
 import pprint
 import time
@@ -21,6 +18,7 @@ class PluginThread(Thread):
         Constructor.
         """
         super().__init__()
+        self.active = False
         self.daemon = True
         self.pyload = manager.pyload
         self._ = manager._
@@ -28,32 +26,34 @@ class PluginThread(Thread):
 
     def write_debug_report(self, pyfile):
         """
-        writes a.
+        writes a debug report.
 
-        :return:
+        :return:``
         """
         date = time.strftime("%Y-%m-%d_%H-%M-%S")
         dump_name = f"debug_{pyfile.pluginname}_{date}.zip"
-        dump_filename = os.path.join(self.pyload.cachedir, dump_name)
+        dump_filename = os.path.join(self.pyload.tempdir, dump_name)
         dump = self.get_debug_dump(pyfile)
 
         try:
             import zipfile
 
             with zipfile.ZipFile(dump_filename, "w") as zip:
-                for entry in os.listdir(
-                    os.path.join(self.pyload.cachedir, pyfile.pluginname)
-                ):
-                    try:
-                        # avoid encoding errors
-                        zip.write(
-                            os.path.join(
-                                self.pyload.cachedir, pyfile.pluginname, entry
-                            ),
-                            os.path.join(pyfile.pluginname, entry),
-                        )
-                    except Exception:
-                        pass
+                try:
+                    for entry in os.listdir(
+                        os.path.join(self.pyload.tempdir, pyfile.pluginname)
+                    ):
+                        try:
+                            # avoid encoding errors
+                            zip.write(
+                                os.path.join(self.pyload.tempdir, pyfile.pluginname, entry),
+                                os.path.join(pyfile.pluginname, entry),
+                            )
+                        except Exception:
+                            pass
+
+                except OSError:
+                    pass
 
                 info = zipfile.ZipInfo(
                     os.path.join(pyfile.pluginname, "debug_Report.txt"), time.gmtime()
@@ -128,7 +128,7 @@ class PluginThread(Thread):
 
     def clean(self, pyfile):
         """
-        set thread unactive and release pyfile.
+        set thread as inactive and release pyfile.
         """
         self.active = False
         pyfile.release()

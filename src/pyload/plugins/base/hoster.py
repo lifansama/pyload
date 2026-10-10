@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import inspect
 import re
 import time
@@ -6,7 +5,7 @@ import urllib.parse
 
 from pyload.core.network.exceptions import Abort, Fail, Reconnect, Retry, Skip
 from pyload.core.utils import format, parse
-from pyload.core.utils.old import decode, fixurl
+from pyload.core.utils.old import fixurl
 
 from ..helpers import parse_html_form, replace_patterns
 from .captcha import BaseCaptcha
@@ -28,10 +27,8 @@ def parse_file_info(klass, url="", html=""):
 class BaseHoster(BasePlugin):
     __name__ = "BaseHoster"
     __type__ = "base"
-    __version__ = "0.34"
+    __version__ = "0.41"
     __status__ = "stable"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"^unmatchable$"
     __config__ = [
@@ -45,8 +42,7 @@ class BaseHoster(BasePlugin):
 
     URL_REPLACEMENTS = []
 
-    @classmethod
-    def get_info(cls, url="", html=""):
+    def get_info(self, url="", html=""):
         url = fixurl(url, unquote=True)
         info = {
             "name": parse.name(url),
@@ -54,11 +50,11 @@ class BaseHoster(BasePlugin):
             "pattern": {},
             "size": 0,
             "status": 7 if url else 8,
-            "url": replace_patterns(url, cls.URL_REPLACEMENTS),
+            "url": replace_patterns(url, self.URL_REPLACEMENTS),
         }
 
         try:
-            info["pattern"] = re.match(cls.__pattern__, url).groupdict()
+            info["pattern"] = re.match(self.__pattern__, url).groupdict()
 
         except Exception:
             pass
@@ -68,18 +64,20 @@ class BaseHoster(BasePlugin):
     def __init__(self, pyfile):
         self._init(pyfile.m.pyload)
 
-        #: Engage wan reconnection
-        self.want_reconnect = False  # TODO: Change to `want_reconnect` in 0.6.x
+        #: Engage want reconnection
+        self.want_reconnect = False
 
         #: Enable simultaneous processing of multiple downloads
-        self.multi_dl = True  # TODO: Change to `multi_dl` in 0.6.x
+        self.multi_dl = True
 
         #: time.time() + wait in seconds
         self.waiting = False
 
+        #: Plugin is long waiting (> max_wait)
+        self.long_waiting = False
+
         #: Account handler instance, see :py:class:`Account`
         self.account = None
-        self.user = None  # TODO: Remove in 0.6.x
         self.premium = None
 
         #: Associated pyfile instance, see `PyFile`
@@ -109,22 +107,24 @@ class BaseHoster(BasePlugin):
         #: Hide any user/password
         try:
             user = self.account.user
-            pw = self.account.info["login"]["password"]
-        except AttributeError:
-            pass
-        else:
             hidden_user = "{:*<{}}".format(self.account.user[:3], 7)
+            args = tuple(arg.replace(user, hidden_user) for arg in args if arg)
+        except (AttributeError, KeyError, TypeError):
+            pass
+
+        try:
+            pw = self.account.get_login("password")
             hidden_pw = "*" * 10
-            args = (
-                a.replace(user, hidden_user).replace(pw, hidden_pw) for a in args if a
-            )
+            args = tuple(arg.replace(pw, hidden_pw) for arg in args if arg)
+        except (AttributeError, KeyError, TypeError):
+            pass
 
         log(
             "{plugintype} {pluginname}[{id}]: {msg}".format(
                 plugintype=plugintype.upper(),
                 pluginname=pluginname,
                 id=self.pyfile.id,
-                msg="%s" * len(args),
+                msg=" | ".join(["%s"] * len(args)),
             ),
             *args,
             **kwargs,
@@ -154,7 +154,6 @@ class BaseHoster(BasePlugin):
             self.load_account()  # TODO: Move to PluginThread in 0.6.x
         else:
             self.account = False
-            self.user = None  # TODO: Remove in 0.6.x
 
         try:
             self.req.close()
@@ -166,12 +165,10 @@ class BaseHoster(BasePlugin):
                 self.classname, self.account.user
             )
             # NOTE: Avoid one unnecessary get_info call by `self.account.premium` here
-            self.premium = self.account.info["data"]["premium"]
+            self.premium = self.account.get_data("premium")
         else:
             self.req = self.pyload.request_factory.get_request(self.classname)
             self.premium = False
-
-        self.req.set_option("timeout", 60)  # TODO: Remove in 0.6.x
 
         self.setup_base()
         self.grab_info()
@@ -179,28 +176,21 @@ class BaseHoster(BasePlugin):
         self.check_status()
 
     def load_account(self):
-        if not self.account:
+        if self.account is None:
             self.account = self.pyload.account_manager.get_account_plugin(
                 self.classname
             )
 
-        if not self.account:
-            self.account = False
-            self.user = None  # TODO: Remove in 0.6.x
-
-        else:
+        if self.account:
             self.account.choose()
-            self.user = self.account.user  # TODO: Remove in 0.6.x
-            if self.account.user is None:
-                self.account = False
 
     def _update_name(self):
-        name = decode(self.info.get("name"))
+        name = self.info.get("name")
 
-        if name and name != decode(self.info.get("url")):
+        if name and name != self.info.get("url"):
             self.pyfile.name = name
         else:
-            name = decode(self.pyfile.name)
+            name = self.pyfile.name
 
         self.log_info(self._("Link name: {}").format(name))
 
@@ -232,17 +222,18 @@ class BaseHoster(BasePlugin):
         self._update_status()
 
     def grab_info(self):
-        self.log_info(self._("Grabbing link info..."))
+        if self.pyfile.status != 2:
+            self.log_info(self._("Grabbing link info..."))
 
-        old_info = dict(self.info)
-        new_info = self.get_info(self.pyfile.url, self.data)
+            old_info = dict(self.info)
+            new_info = self.get_info(replace_patterns(self.pyfile.url, self.URL_REPLACEMENTS), self.data)
 
-        self.info.update(new_info)
+            self.info.update(new_info)
 
-        self.log_debug(f"Link info: {self.info}")
-        self.log_debug(f"Previous link info: {old_info}")
+            self.log_debug(f"Link info: {self.info}")
+            self.log_debug(f"Previous link info: {old_info}")
 
-        self.sync_info()
+            self.sync_info()
 
     def check_status(self):
         status = self.pyfile.status
@@ -298,10 +289,6 @@ class BaseHoster(BasePlugin):
 
     #: Deprecated method, use `_process` instead (Remove in 0.6.x)
     def preprocessing(self, *args, **kwargs):
-        # NOTE: Set pyfile status from `queued` to `starting` as soon as possible to avoid race condition in ThreadManager's assign_job function
-        # NOTE: Move to ThreadManager in 0.6.x
-        self.pyfile.set_status("starting")
-
         # NOTE: Recheck info thread synchronization in 0.6.x
         return self._process(*args, **kwargs)
 
@@ -322,10 +309,10 @@ class BaseHoster(BasePlugin):
 
     def set_wait(self, seconds, strict=False):
         """
-        Set a specific wait time later used with `wait`
+        Set a specific wait time later used with wait()
 
         :param seconds: wait time in seconds
-        :param reconnect: True if a reconnect would avoid wait time
+        :param strict: strict mode
         """
         wait_time = float(seconds)
 
@@ -333,7 +320,7 @@ class BaseHoster(BasePlugin):
             return False
 
         old_wait_until = self.pyfile.wait_until
-        new_wait_until = time.time() + wait_time + float(not strict)
+        new_wait_until = time.monotonic() + wait_time + float(not strict)
 
         self.log_debug(
             "WAIT set to timestamp {}".format(new_wait_until),
@@ -346,22 +333,27 @@ class BaseHoster(BasePlugin):
     def wait(self, seconds=None, reconnect=None):
         """
         Waits the time previously set.
+
+        :param seconds: How many seconds to wait or if equals to None then use the value from set_wait()
+        :param reconnect: True if reconnect would avoid wait time
         """
         if seconds is not None:
             self.set_wait(seconds)
 
-        if reconnect is None:
-            reconnect = seconds > self.config.get("max_wait", 10) * 60
-
-        self.set_reconnect(reconnect)
-
-        wait_time = self.pyfile.wait_until - time.time()
+        wait_time = self.pyfile.wait_until - time.monotonic()
 
         if wait_time < 1:
             self.log_warning(self._("Invalid wait time interval"))
             return
 
+        long_waiting = wait_time > self.config.get('max_wait', 10) * 60
+        if reconnect is None:
+            reconnect = long_waiting
+
+        self.set_reconnect(reconnect)
+
         self.waiting = True
+        self.long_waiting = long_waiting
 
         status = self.pyfile.status  # NOTE: Recheck in 0.6.x
         self.pyfile.set_status("waiting")
@@ -374,17 +366,18 @@ class BaseHoster(BasePlugin):
                 self.log_warning(self._("Reconnection ignored due logged account"))
 
         if not self.want_reconnect or self.account:
-            while self.pyfile.wait_until > time.time():
+            while self.pyfile.wait_until > time.monotonic():
                 self.check_status()
                 time.sleep(2)
 
         else:
-            while self.pyfile.wait_until > time.time():
+            while self.pyfile.wait_until > time.monotonic():
                 self.check_status()
                 self.thread.m.reconnecting.wait(1)
 
                 if self.thread.m.reconnecting.is_set():
                     self.waiting = False
+                    self.long_waiting = False
                     self.want_reconnect = False
 
                     self.req.clear_cookies()
@@ -393,6 +386,7 @@ class BaseHoster(BasePlugin):
                 time.sleep(2)
 
         self.waiting = False
+        self.long_waiting = False
         self.pyfile.status = status  # NOTE: Recheck in 0.6.x
 
     def skip(self, msg=""):
@@ -468,29 +462,28 @@ class BaseHoster(BasePlugin):
                     "{} | {}".format(msg, self._("Url was already processed as free"))
                 )
 
-        self.req.clear_cookies()
-
         raise Retry(msg)
 
-    def retry(self, attemps=5, wait=1, msg="", msgfail="Max retries reached"):
+    def retry(self, attempts=5, wait=1, msg="", msgfail="Max retries reached"):
         """
         Retries and begin again from the beginning.
 
-        :param attemps: number of maximum retries
+        :param attempts: number of maximum retries
         :param wait: time to wait in seconds before retry
-        :param msg: message passed to fail if attemps value was reached
+        :param msg: message to pass to retry if attempts value was not yet reached
+        :param msgfail: message passed to fail if attempts value was reached
         """
         frame = inspect.currentframe()
 
         try:
             id = frame.f_back.f_lineno
         finally:
-            del frame  #: Delete the frame or it wont be cleaned
+            del frame  #: Delete the frame or it won't be cleaned
 
         if id not in self.retries:
             self.retries[id] = 0
 
-        if 0 < attemps <= self.retries[id]:
+        if 0 < attempts <= self.retries[id]:
             self.fail(msgfail)
 
         self.retries[id] += 1
@@ -500,27 +493,27 @@ class BaseHoster(BasePlugin):
         raise Retry(msg)
 
     def retry_captcha(
-        self, attemps=10, wait=1, msg="", msgfail="Max captcha retries reached"
+        self, attempts=10, wait=1, msg="", msgfail="Max captcha retries reached"
     ):
         self.captcha.invalid(msg)
-        self.retry(attemps, wait, msg=self._("Retry Captcha"), msgfail=msgfail)
+        self.retry(attempts, wait, msg=self._("Retry Captcha"), msgfail=msgfail)
 
-    def fixurl(self, url, baseurl=None, unquote=True):
-        url = fixurl(url, unquote=True)
-        baseurl = fixurl(baseurl or self.pyfile.url, unquote=True)
-
+    def fixurl(self, url, baseurl=None):
+        baseurl = baseurl or self.pyfile.url
         if not urllib.parse.urlparse(url).scheme:
             url_p = urllib.parse.urlparse(baseurl)
             baseurl = "{}://{}".format(url_p.scheme, url_p.netloc)
             url = urllib.parse.urljoin(baseurl, url)
 
-        return fixurl(url, unquote)
+        return url
 
     def load(self, *args, **kwargs):
         self.check_status()
         return super().load(*args, **kwargs)
 
-    def parse_html_form(self, attr_str="", input_names={}):
+    def parse_html_form(self, attr_str="", input_names=None):
+        input_names = input_names or {}
+
         return parse_html_form(attr_str, self.data, input_names)
 
     def get_password(self):

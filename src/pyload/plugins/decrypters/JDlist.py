@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import base64
 
 from ..base.decrypter import BaseDecrypter
@@ -10,8 +8,6 @@ class JDlist(BaseDecrypter):
     __type__ = "decrypter"
     __version__ = "0.05"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"jdlist://(?P<LIST>[\w\+^_]+==)"
     __config__ = [

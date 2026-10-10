@@ -1,12 +1,6 @@
-# -*- coding: utf-8 -*-
-# AUTHOR: vuolter
+import bitmath
 
-from pyload.utils.check import is_mapping, isiterable
-
-try:
-    import bitmath
-except ImportError:
-    bitmath = None
+from .check import is_mapping, is_iterable
 
 
 def convert(obj, rule, func, args=(), kwargs=None, fallback=None):
@@ -21,7 +15,7 @@ def convert(obj, rule, func, args=(), kwargs=None, fallback=None):
             res = dict(
                 (convert(k, *cvargs), convert(v, *cvargs)) for k, v in obj.items()
             )
-        elif isiterable(obj):
+        elif is_iterable(obj):
             res = type(obj)(convert(i, *cvargs) for i in obj)
         else:
             res = obj
@@ -75,11 +69,14 @@ def size(value, in_unit, out_unit):
 
 
 def to_bytes(obj, encoding="utf-8", errors="strict"):
-    try:
+    if isinstance(obj, bytes):
+        return obj
+    elif isinstance(obj, str):
         return obj.encode(encoding, errors)
-    except AttributeError:
-        return bytes(obj, encoding)
-
+    elif isinstance(obj, (bytearray, memoryview)):
+        return bytes(obj)  # No encoding needed for binary types
+    else:
+        raise TypeError(f"Cannot convert {type(obj).__name__} to bytes; supported types: str, bytes, bytearray, memoryview")
 
 def to_str(obj, encoding="utf-8", errors="strict"):
     try:
@@ -99,7 +96,7 @@ def to_list(obj):
         pass
     elif is_mapping(obj):
         return list(obj.items())
-    elif isiterable(obj, strict=False):
+    elif is_iterable(obj, strict=False):
         return list(obj)
     elif obj is not None:
         return [obj]

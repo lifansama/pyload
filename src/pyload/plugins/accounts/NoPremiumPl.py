@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import datetime
 import hashlib
 import json
@@ -11,14 +9,12 @@ from ..base.multi_account import MultiAccount
 class NoPremiumPl(MultiAccount):
     __name__ = "NoPremiumPl"
     __type__ = "account"
-    __version__ = "0.11"
+    __version__ = "0.12"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
     __config__ = [
-        ("mh_mode", "all;listed;unlisted", "Filter hosters to use", "all"),
-        ("mh_list", "str", "Hoster list (comma separated)", ""),
+        ("mh_mode", "all;listed;unlisted", "Filter downloaders to use", "all"),
+        ("mh_list", "str", "Downloader list (comma separated)", ""),
         ("mh_interval", "int", "Reload interval in hours", 12),
     ]
 
@@ -66,7 +62,7 @@ class NoPremiumPl(MultiAccount):
                 datetime.datetime.fromtimestamp(int(result["expire"])).timetuple()
             )
 
-        traffic_left = result["balance"] << 10
+        traffic_left = result["balance"] * 1024 ** 2
 
         return {
             "validuntil": valid_untill,

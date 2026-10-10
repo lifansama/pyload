@@ -1,17 +1,15 @@
-# -*- coding: utf-8 -*-
 import time
 
-from ..helpers import is_sequence
+from pyload.core.utils.check import is_sequence
+
 from .addon import BaseAddon, expose
 
 
 class Notifier(BaseAddon):
     __name__ = "Notifier"
     __type__ = "addon"
-    __version__ = "0.11"
+    __version__ = "0.13"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __config__ = [
         ("enabled", "bool", "Activated", False),
@@ -19,6 +17,8 @@ class Notifier(BaseAddon):
         ("reconnection", "bool", "Notify reconnection request", False),
         ("downloadfinished", "bool", "Notify download finished", True),
         ("downloadfailed", "bool", "Notify download failed", True),
+        ("alldownloadsfinished", "bool", "Notify all downloads finished", True),
+        ("alldownloadsprocessed", "bool", "Notify all downloads processed", True),
         ("packagefinished", "bool", "Notify package finished", True),
         ("packagefailed", "bool", "Notify package failed", True),
         ("update", "bool", "Notify pyLoad update", False),
@@ -105,10 +105,12 @@ class Notifier(BaseAddon):
         self.notify(self._("Download failed"), pyfile.name)
 
     def all_downloads_processed(self):
-        self.notify(self._("All downloads processed"))
+        if self.config.get("alldownloadsprocessed", True):
+            self.notify(self._("All downloads processed"))
 
     def all_downloads_finished(self):
-        self.notify(self._("All downloads finished"))
+        if self.config.get("alldownloadsfinished", True):
+            self.notify(self._("All downloads finished"))
 
     @expose
     def notify(self, event, msg=None, key=None):
@@ -124,7 +126,7 @@ class Notifier(BaseAddon):
         ):
             return
 
-        elapsed_time = time.time() - self.last_notify
+        elapsed_time = time.monotonic() - self.last_notify
 
         if elapsed_time < self.config.get("sendinterval", 1):
             return
@@ -149,5 +151,5 @@ class Notifier(BaseAddon):
             return True
 
         finally:
-            self.last_notify = time.time()
+            self.last_notify = time.monotonic()
             self.notifications += 1

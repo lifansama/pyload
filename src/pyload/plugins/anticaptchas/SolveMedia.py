@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 
 from pyload.core.network.exceptions import Fail
@@ -12,8 +10,6 @@ class SolveMedia(CaptchaService):
     __type__ = "anticaptcha"
     __version__ = "0.22"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __description__ = """SolveMedia captcha service plugin"""
     __license__ = "GPLv3"

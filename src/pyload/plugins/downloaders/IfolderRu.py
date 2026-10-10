@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 
 from ..base.simple_downloader import SimpleDownloader
@@ -10,8 +8,6 @@ class IfolderRu(SimpleDownloader):
     __type__ = "downloader"
     __version__ = "0.44"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"http://(?:www)?(files\.)?(ifolder\.ru|metalarea\.org|rusfolder\.(com|net|ru))/(files/)?(?P<ID>\d+)"
     __config__ = [

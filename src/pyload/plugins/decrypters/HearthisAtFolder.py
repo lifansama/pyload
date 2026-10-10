@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import re
 import urllib.parse
 
@@ -10,8 +9,6 @@ class HearthisAtFolder(BaseDecrypter):
     __type__ = "decrypter"
     __version__ = "0.01"
     __status__ = "testing"
-
-    __pyload_version__ = "0.5"
 
     __pattern__ = r"https?://(?:www\.)?hearthis\.at/.*(?<!#pyload)$"
     __config__ = [

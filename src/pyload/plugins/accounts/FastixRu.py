@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import json
 
 from ..base.multi_account import MultiAccount
@@ -8,14 +6,12 @@ from ..base.multi_account import MultiAccount
 class FastixRu(MultiAccount):
     __name__ = "FastixRu"
     __type__ = "account"
-    __version__ = "0.12"
+    __version__ = "0.13"
     __status__ = "testing"
 
-    __pyload_version__ = "0.5"
-
     __config__ = [
-        ("mh_mode", "all;listed;unlisted", "Filter hosters to use", "all"),
-        ("mh_list", "str", "Hoster list (comma separated)", ""),
+        ("mh_mode", "all;listed;unlisted", "Filter downloaders to use", "all"),
+        ("mh_list", "str", "Downloader list (comma separated)", ""),
         ("mh_interval", "int", "Reload interval in hours", 12),
     ]
 
@@ -43,10 +39,10 @@ class FastixRu(MultiAccount):
         json_data = json.loads(html)
 
         points = json_data["points"]
-        kb = float(points) << 10 ** 2 // 1000
+        trafficleft = float(points) * 1024 ** 2
 
         if points > 0:
-            account_info = {"validuntil": -1, "trafficleft": kb}
+            account_info = {"validuntil": -1, "trafficleft": trafficleft}
         else:
             account_info = {"validuntil": None, "trafficleft": None, "premium": False}
         return account_info
